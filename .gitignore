@@ -1,0 +1,180 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+# iOS directory removed - no longer supported
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Android related
+/android/.gradle/
+/android/captures/
+/android/gradlew
+/android/gradlew.bat
+/android/local.properties
+/android/app/src/main/java/io/flutter/plugins/
+/android/key.properties
+*.jks
+*.keystore
+
+# Windows related
+/windows/flutter/ephemeral/
+/windows/CMakeFiles/
+/windows/cmake_install.cmake
+/windows/CMakeCache.txt
+/windows/runner/*.exe
+/windows/runner/*.dll
+/windows/runner/*.pdb
+/windows/runner/*.lib
+/windows/runner/*.exp
+/windows/runner/Debug/
+/windows/runner/Release/
+/windows/runner/x64/
+/windows/build/
+
+# Linux related (keeping for potential future support)
+/linux/flutter/ephemeral/
+
+# Coverage
+coverage/
+
+# Exceptions to above rules.
+!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Firebase
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+/ios/firebase_app_id_file.json
+
+# Fastlane
+/android/fastlane/report.xml
+/android/fastlane/Preview.html
+/android/fastlane/screenshots
+/android/fastlane/test_output
+
+# FVM Version Cache
+.fvm/
+
+# Submodules
+.submodules
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.chopper.dart
+*.pb.dart
+*.pbjson.dart
+*.pbgrpc.dart
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# IDE specific files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/extensions.json
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Network related
+.network
+
+# Vercel
+.vercel
+
+# Local development
+.local
+
+# Package managers
+node_modules/
+yarn-error.log
+
+# Build outputs
+dist/
+out/
+
+# Test coverage
+.nyc_output/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
