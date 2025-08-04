@@ -127,6 +127,7 @@ class WiFiDirectManager(
             
             override fun onFailure(reasonCode: Int) {
                 result.success("WiFi Direct settings reset") // Still consider success
+                methodChannel.invokeMethod("onDebug", "WiFi Direct settings reset failed: $reasonCode")
                 methodChannel.invokeMethod("onWifiDirectReset", null)
             }
         })

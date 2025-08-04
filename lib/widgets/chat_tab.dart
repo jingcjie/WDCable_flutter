@@ -356,16 +356,8 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   String _formatMessageContent(String content) {
-    if (content.startsWith('SPEED_TEST_')) {
-      // Parse speed test message
-      final parts = content.split('_');
-      if (parts.length >= 4) {
-        final type = parts[2]; // DOWNLOAD or UPLOAD
-        final sizeStr = parts[3];
-        return 'Speed test $type - ${sizeStr}B';
-      }
-    }
-    return content;
+    // Handle Windows line endings (\r) and convert them to actual newlines
+    return content.replaceAll('\r', '\n');
   }
 
   String _formatTimestamp(DateTime timestamp) {

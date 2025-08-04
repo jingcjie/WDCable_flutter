@@ -660,8 +660,8 @@ class WiFiDirectController {
       );
       _updateState(_currentState.copyWith(currentFileTransfer: updatedTransfer));
       
-      // Mark transfer as completed when progress reaches 100% for sent files
-      if (progress >= 1.0 && updatedTransfer.isUploading) {
+      // Mark transfer as completed when progress reaches 100% for both sent and received files
+      if (progress >= 1.0) {
         final completedTransfer = updatedTransfer.copyWith(
           isCompleted: true,
         );
@@ -670,7 +670,7 @@ class WiFiDirectController {
           currentFileTransfer: completedTransfer,
         ));
         
-        _addLog('File send completed: $fileName');
+        _addLog('File ${updatedTransfer.isUploading ? "send" : "receive"} completed: $fileName');
       }
     }
   }
@@ -723,13 +723,9 @@ class WiFiDirectController {
       
       // Only clear if the transfer is completed
       if (currentTransfer.isCompleted) {
-        // Add to recent transfers before clearing
-        final updatedRecent = List<FileTransferInfo>.from(_currentState.recentFileTransfers)
-          ..insert(0, currentTransfer);
-        
+        // Simply clear the current transfer (history already added when transfer completed)
         _updateState(_currentState.copyWith(
           currentFileTransfer: null,
-          recentFileTransfers: updatedRecent.take(10).toList(),
         ));
         _addLog('Cleared completed transfer: ${currentTransfer.fileName}');
       }

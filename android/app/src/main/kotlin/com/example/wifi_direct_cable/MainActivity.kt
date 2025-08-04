@@ -88,6 +88,10 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     }
     
     override fun onDestroy() {
+        val channel = wifiDirectManager.channel
+        if (channel != null) {
+            channel.close()
+        }
         super.onDestroy()
         socketManager.cleanup()
     }
