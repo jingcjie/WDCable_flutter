@@ -35,11 +35,9 @@ A separate version for Windows is also available, providing the same powerful fe
 
 ## 📸 Screenshots
 
-*(Add screenshots of the application here to showcase the UI)*
-
-| Connection | Chat  | Speed Test | File Transfer |
-| :---: | :---: | :---: | :---: |
 | ![Connection Tab](assets/s1.jpg) | ![Chat Tab](assets/s2.jpg) | ![Speed Test Tab](assets/s3.jpg) | ![File Transfer Tab](assets/s4.jpg) |
+| :---: | :---: | :---: | :---: |
+| Connection | Chat  | Speed Test | File Transfer |
 
 ## 🏁 Getting Started
 
