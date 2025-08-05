@@ -356,41 +356,6 @@ class WiFiDirectController {
     }
   }
   
-  Future<void> getDiscoveryStatus() async {
-    try {
-      final status = await _service.getDiscoveryStatus();
-      _addLog('=== Discovery Status ===');
-      
-      // Check if this is Android or Windows based on available fields
-      if (status.containsKey('discoveryAttempts')) {
-        // Android-specific debugging
-        _addLog('--- Android WiFi P2P Status ---');
-        _addLog('Is Discovering: ${status['isDiscovering'] ?? false}');
-        _addLog('Discovery Attempts: ${status['discoveryAttempts'] ?? 0}');
-        _addLog('Last Discovery Time: ${status['lastDiscoveryTime'] != null ? DateTime.fromMillisecondsSinceEpoch(status['lastDiscoveryTime']) : 'Never'}');
-        _addLog('Current Peer Count: ${status['currentPeerCount'] ?? 0}');
-        _addLog('Last Peer Count: ${status['lastPeerCount'] ?? 0}');
-        _addLog('WiFi Enabled: ${status['wifiEnabled'] ?? false}');
-        _addLog('WiFi P2P Enabled: ${status['wifiP2pEnabled'] ?? false}');
-        _addLog('Location Permission: ${status['locationPermission'] ?? false}');
-        _addLog('Nearby WiFi Permission: ${status['nearbyWifiPermission'] ?? false}');
-        
-        // Log peer details if available
-        final peers = status['peers'] as List<dynamic>? ?? [];
-        if (peers.isNotEmpty) {
-          _addLog('--- Current Peers ---');
-          for (int i = 0; i < peers.length; i++) {
-            final peer = Map<String, dynamic>.from(peers[i] as Map);
-            _addLog('Peer $i: ${peer['deviceName']} (${peer['deviceAddress']}) - ${peer['status']}');
-          }
-        }
-      } 
-      _addLog('Timestamp: ${DateTime.fromMillisecondsSinceEpoch(status['timestamp'] ?? 0)}');
-      _addLog('========================');
-    } catch (e) {
-      _addLog('Failed to get discovery status: $e');
-    }
-  }
   
   Future<void> stopDiscovery() async {
     try {

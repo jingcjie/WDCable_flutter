@@ -187,7 +187,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
       });
       _animationController.repeat();
       
-      await widget.controller.startSpeedTest(10);
+      await widget.controller.startSpeedTest(20);
       
       setState(() {
         _isTestRunning = false;

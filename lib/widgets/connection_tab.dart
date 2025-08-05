@@ -172,21 +172,6 @@ class ConnectionTab extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: controller.getDiscoveryStatus,
-                  icon: const Icon(Icons.bug_report),
-                  label: const Text('Debug Status'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
                   onPressed: controller.resetWifiDirectSettings,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Reset WiFi Direct'),
