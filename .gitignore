@@ -9,7 +9,7 @@
 .history
 .svn/
 migrate_working_dir/
-
+.trae/
 # IntelliJ related
 .idea/
 
