@@ -35,7 +35,7 @@ A separate version for Windows is also available, providing the same powerful fe
 
 ## 📸 Screenshots
 
-| ![Connection Tab](assets/s1.jpg) | ![Chat Tab](assets/s2.jpg) | ![Speed Test Tab](assets/s3.jpg) | ![File Transfer Tab](assets/s4.jpg) |
+| <img src="assets/s1.jpg" alt="Connection Tab" width="200"> | <img src="assets/s2.jpg" alt="Chat Tab" width="200"> | <img src="assets/s3.jpg" alt="Speed Test Tab" width="200"> | <img src="assets/s4.jpg" alt="File Transfer Tab" width="200"> |
 | :---: | :---: | :---: | :---: |
 | Connection | Chat  | Speed Test | File Transfer |
 
