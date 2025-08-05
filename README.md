@@ -22,7 +22,7 @@ The core strength of this application is its ability to operate completely offli
 
 ### 💻 Windows Version
 
-A separate version for Windows is also available, providing the same powerful features for your desktop or laptop. You can find it here: [**Download Windows Version**](#).
+A separate version for Windows is also available, providing the same powerful features for your desktop or laptop. You can find it here: [**Windows Version Repo**](https://github.com/jingcjie/WDCableWUI).
 
 ## 🌟 Features
 
@@ -37,9 +37,9 @@ A separate version for Windows is also available, providing the same powerful fe
 
 *(Add screenshots of the application here to showcase the UI)*
 
-| Connection Tab | Chat Tab | File Transfer Tab |
-| :---: | :---: | :---: |
-| ![Connection Tab](link_to_screenshot_1.png) | ![Chat Tab](link_to_screenshot_2.png) | ![File Transfer Tab](link_to_screenshot_3.png) |
+| Connection | Chat  | Speed Test | File Transfer |
+| :---: | :---: | :---: | :---: |
+| ![Connection Tab](assets/s1.jpg) | ![Chat Tab](assets/s2.jpg) | ![Speed Test Tab](assets/s3.jpg) | ![File Transfer Tab](assets/s4.jpg) |
 
 ## 🏁 Getting Started
 
@@ -82,3 +82,4 @@ Contributions are what make the open-source community such an amazing place to l
 ## 📜 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
