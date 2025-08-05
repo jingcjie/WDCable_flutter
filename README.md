@@ -52,7 +52,7 @@ To get a local copy up and running, follow these simple steps.
 
 1.  Clone the repo
     ```sh
-    git clone https://github.com/your_username/wifi_direct_cable.git
+    git clone https://github.com/jingcjie/WDCable_flutter
     ```
 2.  Navigate to the project directory
     ```sh
