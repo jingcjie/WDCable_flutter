@@ -2,6 +2,7 @@ package com.example.wifi_direct_cable
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -21,6 +22,9 @@ class FlutterMethodChannelHandler(
     private val fileTransferService: FileTransferService,
     private val permissionManager: PermissionManager
 ) : MethodChannel.MethodCallHandler {
+    
+    private val sharedPreferences: SharedPreferences = 
+        context.getSharedPreferences("wifi_direct_cable_prefs", Context.MODE_PRIVATE)
     
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -91,6 +95,61 @@ class FlutterMethodChannelHandler(
             "openFile" -> {
                 val filePath = call.argument<String>("filePath")
                 openFile(filePath, result)
+            }
+            // SharedPreferences methods
+            "setStringPreference" -> {
+                val key = call.argument<String>("key")
+                val value = call.argument<String>("value")
+                setStringPreference(key, value, result)
+            }
+            "getStringPreference" -> {
+                val key = call.argument<String>("key")
+                val defaultValue = call.argument<String>("defaultValue")
+                getStringPreference(key, defaultValue, result)
+            }
+            "setIntPreference" -> {
+                val key = call.argument<String>("key")
+                val value = call.argument<Int>("value")
+                setIntPreference(key, value, result)
+            }
+            "getIntPreference" -> {
+                val key = call.argument<String>("key")
+                val defaultValue = call.argument<Int>("defaultValue")
+                getIntPreference(key, defaultValue, result)
+            }
+            "setBoolPreference" -> {
+                val key = call.argument<String>("key")
+                val value = call.argument<Boolean>("value")
+                setBoolPreference(key, value, result)
+            }
+            "getBoolPreference" -> {
+                val key = call.argument<String>("key")
+                val defaultValue = call.argument<Boolean>("defaultValue")
+                getBoolPreference(key, defaultValue, result)
+            }
+            "setDoublePreference" -> {
+                val key = call.argument<String>("key")
+                val value = call.argument<Double>("value")
+                setDoublePreference(key, value, result)
+            }
+            "getDoublePreference" -> {
+                val key = call.argument<String>("key")
+                val defaultValue = call.argument<Double>("defaultValue")
+                getDoublePreference(key, defaultValue, result)
+            }
+            "removePreference" -> {
+                val key = call.argument<String>("key")
+                removePreference(key, result)
+            }
+            "clearPreferences" -> {
+                clearPreferences(result)
+            }
+            "containsKey" -> {
+                val key = call.argument<String>("key")
+                containsKey(key, result)
+            }
+            "getKeys" -> {
+                getKeys(result)
             }
             else -> {
                 result.notImplemented()
@@ -184,6 +243,167 @@ class FlutterMethodChannelHandler(
             MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
         } else {
             null
+        }
+    }
+    
+    // SharedPreferences implementation methods
+    private fun setStringPreference(key: String?, value: String?, result: MethodChannel.Result) {
+        if (key == null || value == null) {
+            result.error("INVALID_ARGUMENTS", "Key and value cannot be null", null)
+            return
+        }
+        try {
+            val editor = sharedPreferences.edit()
+            editor.putString(key, value)
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to set string preference: ${e.message}", null)
+        }
+    }
+    
+    private fun getStringPreference(key: String?, defaultValue: String?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val value = sharedPreferences.getString(key, defaultValue)
+            result.success(value)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to get string preference: ${e.message}", null)
+        }
+    }
+    
+    private fun setIntPreference(key: String?, value: Int?, result: MethodChannel.Result) {
+        if (key == null || value == null) {
+            result.error("INVALID_ARGUMENTS", "Key and value cannot be null", null)
+            return
+        }
+        try {
+            val editor = sharedPreferences.edit()
+            editor.putInt(key, value)
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to set int preference: ${e.message}", null)
+        }
+    }
+    
+    private fun getIntPreference(key: String?, defaultValue: Int?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val value = sharedPreferences.getInt(key, defaultValue ?: 0)
+            result.success(value)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to get int preference: ${e.message}", null)
+        }
+    }
+    
+    private fun setBoolPreference(key: String?, value: Boolean?, result: MethodChannel.Result) {
+        if (key == null || value == null) {
+            result.error("INVALID_ARGUMENTS", "Key and value cannot be null", null)
+            return
+        }
+        try {
+            val editor = sharedPreferences.edit()
+            editor.putBoolean(key, value)
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to set bool preference: ${e.message}", null)
+        }
+    }
+    
+    private fun getBoolPreference(key: String?, defaultValue: Boolean?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val value = sharedPreferences.getBoolean(key, defaultValue ?: false)
+            result.success(value)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to get bool preference: ${e.message}", null)
+        }
+    }
+    
+    private fun setDoublePreference(key: String?, value: Double?, result: MethodChannel.Result) {
+        if (key == null || value == null) {
+            result.error("INVALID_ARGUMENTS", "Key and value cannot be null", null)
+            return
+        }
+        try {
+            val editor = sharedPreferences.edit()
+            editor.putFloat(key, value.toFloat())
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to set double preference: ${e.message}", null)
+        }
+    }
+    
+    private fun getDoublePreference(key: String?, defaultValue: Double?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val value = sharedPreferences.getFloat(key, defaultValue?.toFloat() ?: 0.0f).toDouble()
+            result.success(value)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to get double preference: ${e.message}", null)
+        }
+    }
+    
+    private fun removePreference(key: String?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val editor = sharedPreferences.edit()
+            editor.remove(key)
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to remove preference: ${e.message}", null)
+        }
+    }
+    
+    private fun clearPreferences(result: MethodChannel.Result) {
+        try {
+            val editor = sharedPreferences.edit()
+            editor.clear()
+            val success = editor.commit()
+            result.success(success)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to clear preferences: ${e.message}", null)
+        }
+    }
+    
+    private fun containsKey(key: String?, result: MethodChannel.Result) {
+        if (key == null) {
+            result.error("INVALID_ARGUMENTS", "Key cannot be null", null)
+            return
+        }
+        try {
+            val contains = sharedPreferences.contains(key)
+            result.success(contains)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to check key existence: ${e.message}", null)
+        }
+    }
+    
+    private fun getKeys(result: MethodChannel.Result) {
+        try {
+            val keys = sharedPreferences.all.keys.toList()
+            result.success(keys)
+        } catch (e: Exception) {
+            result.error("PREFERENCE_ERROR", "Failed to get keys: ${e.message}", null)
         }
     }
 }

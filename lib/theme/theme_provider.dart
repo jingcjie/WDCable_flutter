@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/data_manager.dart';
 
 class ThemeProvider extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
@@ -23,8 +23,8 @@ class ThemeProvider extends ChangeNotifier {
   }
   
   void _loadTheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    final themeIndex = prefs.getInt(_themeKey) ?? 0;
+    final dataManager = DataManager.instance;
+    final themeIndex = await dataManager.getInt(_themeKey, defaultValue: 0) ?? 0;
     _themeMode = ThemeMode.values[themeIndex];
     notifyListeners();
   }
@@ -33,8 +33,8 @@ class ThemeProvider extends ChangeNotifier {
     _themeMode = themeMode;
     notifyListeners();
     
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_themeKey, themeMode.index);
+    final dataManager = DataManager.instance;
+    await dataManager.setInt(_themeKey, themeMode.index);
   }
   
   void toggleTheme() {
