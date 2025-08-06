@@ -52,11 +52,11 @@ To get a local copy up and running, follow these simple steps.
 
 1.  Clone the repo
     ```sh
-    git clone https://github.com/jingcjie/WDCable_flutter
+    git clone https://github.com/jingcjie/WDCable_flutter.git
     ```
 2.  Navigate to the project directory
     ```sh
-    cd wifi_direct_cable
+    cd WDCable_flutter
     ```
 3.  Install dependencies
     ```sh

@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'controllers/wifi_direct_controller.dart';
 import 'models/wifi_direct_models.dart';
 import 'widgets/connection_tab.dart';
 import 'widgets/chat_tab.dart';
 import 'widgets/speed_test_tab.dart';
 import 'widgets/file_transfer_tab.dart';
+import 'widgets/settings_tab.dart';
 import 'wifi_direct_service.dart';
+import 'theme/theme_provider.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => ThemeProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -17,13 +25,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'WiFi Direct Cable',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const WiFiDirectHomePage(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'WiFi Direct Cable',
+          theme: AppThemes.lightTheme,
+          darkTheme: AppThemes.darkTheme,
+          themeMode: themeProvider.themeMode,
+          home: const WiFiDirectHomePage(),
+        );
+      },
     );
   }
 }
@@ -44,7 +55,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _controller = WiFiDirectController(WiFiDirectService());
     _initializeController();
   }
@@ -78,7 +89,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
         systemNavigationBarColor: Theme.of(context).scaffoldBackgroundColor,
       ),
       child: Scaffold(
-        backgroundColor: Colors.grey[50],
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
           child: Column(
             children: [
@@ -86,11 +97,11 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
               Container(
                 margin: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardTheme.color,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -107,7 +118,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                      indicatorSize: TabBarIndicatorSize.tab,
                      indicatorPadding: const EdgeInsets.all(2),
                     labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey[600],
+                    unselectedLabelColor: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
                     labelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -119,22 +130,22 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                     tabs: const [
                       Tab(
                         icon: Icon(Icons.wifi, size: 20),
-                        text: 'Connection',
                         height: 60,
                       ),
                       Tab(
                         icon: Icon(Icons.chat_bubble_outline, size: 20),
-                        text: 'Chat',
                         height: 60,
                       ),
                       Tab(
                         icon: Icon(Icons.speed, size: 20),
-                        text: 'Speed Test',
                         height: 60,
                       ),
                       Tab(
                         icon: Icon(Icons.folder, size: 20),
-                        text: 'Files',
+                        height: 60,
+                      ),
+                      Tab(
+                        icon: Icon(Icons.settings, size: 20),
                         height: 60,
                       ),
                     ],
@@ -161,6 +172,10 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                         state: _state,
                       ),
                       FileTransferTab(
+                        controller: _controller,
+                        state: _state,
+                      ),
+                      SettingsTab(
                         controller: _controller,
                         state: _state,
                       ),
