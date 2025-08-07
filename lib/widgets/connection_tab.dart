@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/wifi_direct_models.dart';
 import '../controllers/wifi_direct_controller.dart';
+import 'package:wifi_direct_cable/l10n/app_localizations.dart';
 
 class ConnectionTab extends StatelessWidget {
   final WiFiDirectController controller;
@@ -63,15 +64,15 @@ class ConnectionTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'WiFi P2P Driver',
+                  AppLocalizations.of(context)!.wifiP2pDriver,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   state.isWifiP2pEnabled
-                      ? 'Ready for connections'
-                      : 'Disabled - Enable WiFi to continue',
+                      ? AppLocalizations.of(context)!.readyForConnections
+                      : AppLocalizations.of(context)!.disabledEnableWifi,
                   style: TextStyle(
                     color: state.isWifiP2pEnabled ? Colors.green : Colors.red,
                     fontSize: 12,
@@ -110,7 +111,7 @@ class ConnectionTab extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            'Connection Status: ${state.connectionInfo?.isConnected == true ? "Connected" : "Disconnected"}',
+            '${AppLocalizations.of(context)!.connectionStatus}: ${state.connectionInfo?.isConnected == true ? AppLocalizations.of(context)!.connected : AppLocalizations.of(context)!.disconnected}',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -137,7 +138,7 @@ class ConnectionTab extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.search),
-                  label: Text(state.isDiscovering ? 'Scanning...' : 'Scan for Devices'),
+                  label: Text(state.isDiscovering ? AppLocalizations.of(context)!.scanning : AppLocalizations.of(context)!.scanForDevices),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -148,7 +149,7 @@ class ConnectionTab extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: controller.stopDiscovery,
                   icon: const Icon(Icons.stop),
-                  label: const Text('Stop Scan'),
+                  label: Text(AppLocalizations.of(context)!.stopScan),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -163,7 +164,7 @@ class ConnectionTab extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: controller.logDeviceSettings,
                   icon: const Icon(Icons.info),
-                  label: const Text('Device Info'),
+                  label: Text(AppLocalizations.of(context)!.deviceInfo),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -174,7 +175,7 @@ class ConnectionTab extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: controller.resetWifiDirectSettings,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Reset WiFi Direct'),
+                  label: Text(AppLocalizations.of(context)!.resetWifiDirect),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     backgroundColor: Colors.orange,
@@ -191,27 +192,27 @@ class ConnectionTab extends StatelessWidget {
 
   Widget _buildPeersList(BuildContext context) {
     if (state.peers.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.devices_other,
               size: 64,
               color: Colors.grey,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
-              'No devices found',
-              style: TextStyle(
+              AppLocalizations.of(context)!.noDevicesFound,
+              style: const TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
-              'Tap "Scan for Devices" to find nearby devices',
-              style: TextStyle(
+              AppLocalizations.of(context)!.tapScanForDevices,
+              style: const TextStyle(
                 fontSize: 12,
                 color: Colors.grey,
               ),
@@ -243,7 +244,7 @@ class ConnectionTab extends StatelessWidget {
               ),
             ),
             child: Text(
-              'Available Devices (${state.peers.length})',
+              AppLocalizations.of(context)!.availableDevices(state.peers.length),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -311,8 +312,8 @@ class ConnectionTab extends StatelessWidget {
                       ),
                       minimumSize: Size.zero,
                     ),
-                    child: const Text(
-                      'Connect',
+                    child: Text(
+                      AppLocalizations.of(context)!.connect,
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -357,7 +358,7 @@ class ConnectionTab extends StatelessWidget {
                 const Icon(Icons.terminal, size: 16),
                 const SizedBox(width: 8),
                 Text(
-                  'System Logs',
+                  AppLocalizations.of(context)!.systemLogs,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -367,9 +368,9 @@ class ConnectionTab extends StatelessWidget {
           ),
           Expanded(
             child: state.logs.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No logs yet',
+                      AppLocalizations.of(context)!.noLogsYet,
                       style: TextStyle(color: Colors.grey),
                     ),
                   )

@@ -92,13 +92,13 @@ class WiFiDirectController {
       case FileReceiveProgressEvent:
         final progressEvent = event as FileReceiveProgressEvent;
         _handleFileTransferProgress(progressEvent.fileName, progressEvent.progress);
-        _addLog('File receive progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
+        // _addLog('File receive progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
         break;
         
       case FileSendProgressEvent:
         final progressEvent = event as FileSendProgressEvent;
         _handleFileTransferProgress(progressEvent.fileName, progressEvent.progress);
-        _addLog('File send progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
+        // _addLog('File send progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
         break;
         
       case FileReceivedEvent:
@@ -524,15 +524,35 @@ class WiFiDirectController {
       // Reset the last upload speed
       _lastUploadSpeed = 0.0;
       
-      // Send speed test data and wait for completion
+      // Create a completer to wait for the final upload progress event
+      final completer = Completer<double>();
+      
+      // Set up a listener for the final upload progress event (progress = 1.0)
+      late StreamSubscription subscription;
+      subscription = _service.eventStream.listen((event) {
+        if (event is SpeedTestSendProgressEvent && event.progress >= 0.99) {
+          subscription.cancel();
+          final speedMbps = event.speedMbps;
+          final speedMBps = speedMbps / 8.0; // Convert Mbps to MB/s
+          completer.complete(speedMBps);
+        }
+      });
+      
+      // Send speed test data
       final result = await _service.sendSpeedTestData(sizeBytes);
       _addLog('Upload result: $result');
       
-      // Use the speed from progress events (which is more accurate)
-      final speedMBps = _lastUploadSpeed / 8.0; // Convert Mbps to MB/s
+      // Wait for the final progress event with proper timeout
+      final uploadSpeedMBps = await completer.future.timeout(
+        const Duration(seconds: 35),
+        onTimeout: () {
+          subscription.cancel();
+          throw TimeoutException('Upload speed test timed out', const Duration(seconds: 35));
+        },
+      );
       
-      _addLog('Upload speed test completed: ${speedMBps.toStringAsFixed(2)} MB/s');
-      return speedMBps;
+      _addLog('Upload speed test completed: ${uploadSpeedMBps.toStringAsFixed(2)} MB/s');
+      return uploadSpeedMBps;
     } catch (e) {
       _addLog('Upload speed test failed: $e');
       return 0.0;

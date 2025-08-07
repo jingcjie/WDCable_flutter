@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../controllers/wifi_direct_controller.dart';
 import '../models/wifi_direct_models.dart';
 import '../theme/theme_provider.dart';
+import '../providers/language_provider.dart';
 
 class SettingsTab extends StatefulWidget {
   final WiFiDirectController controller;
@@ -70,22 +73,22 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Settings',
-                        style: TextStyle(
+                        AppLocalizations.of(context)!.settingsTitle,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'Customize your WiFi Direct experience',
-                        style: TextStyle(
+                        AppLocalizations.of(context)!.settingsSubtitle,
+                        style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 14,
                         ),
@@ -100,12 +103,12 @@ class _SettingsTabState extends State<SettingsTab> {
 
           // Transfer Settings Section
           _buildSection(
-            'Transfer Settings',
+            AppLocalizations.of(context)!.transferSettings,
             Icons.swap_horiz,
             [
               _buildSliderSetting(
-                'Transfer Timeout',
-                'Timeout for file transfers (seconds)',
+                AppLocalizations.of(context)!.transferTimeout,
+                AppLocalizations.of(context)!.timeoutForFileTransfers,
                 Icons.timer,
                 _transferTimeout,
                 5.0,
@@ -118,15 +121,15 @@ class _SettingsTabState extends State<SettingsTab> {
 
           // App Settings Section
           _buildSection(
-            'App Settings',
+            AppLocalizations.of(context)!.appSettings,
             Icons.app_settings_alt,
             [
               _buildLanguageSetting(),
               Consumer<ThemeProvider>(
                 builder: (context, themeProvider, child) {
                   return _buildSwitchSetting(
-                    'Dark Mode',
-                    'Use dark theme',
+                    AppLocalizations.of(context)!.darkMode,
+                    AppLocalizations.of(context)!.useDarkTheme,
                     Icons.dark_mode,
                     themeProvider.isDarkMode,
                     (value) {
@@ -143,19 +146,40 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
           const SizedBox(height: 20),
 
+          // GitHub Repositories Section
+          _buildSection(
+            AppLocalizations.of(context)!.githubRepositories,
+            Icons.code,
+            [
+              _buildActionTile(
+                AppLocalizations.of(context)!.flutterAppRepository,
+                AppLocalizations.of(context)!.flutterAppDescription,
+                Icons.phone_android,
+                () => _copyToClipboard('https://github.com/jingcjie/WDCable_flutter'),
+              ),
+              _buildActionTile(
+                AppLocalizations.of(context)!.windowsAppRepository,
+                AppLocalizations.of(context)!.windowsAppDescription,
+                Icons.desktop_windows,
+                () => _copyToClipboard('https://github.com/jingcjie/WDCableWUI'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
           // About Section
           _buildSection(
-            'About',
+            AppLocalizations.of(context)!.about,
             Icons.info,
             [
               _buildInfoTile(
-                'Version',
-                '1.0.0',
+                AppLocalizations.of(context)!.version,
+                '1.0.1',
                 Icons.info_outline,
               ),
               _buildActionTile(
-                'Privacy Policy',
-                'View our privacy policy',
+                AppLocalizations.of(context)!.privacyPolicy,
+                AppLocalizations.of(context)!.viewOurPrivacyPolicy,
                 Icons.privacy_tip,
                 () => _showPrivacyPolicy(),
               ),
@@ -223,21 +247,21 @@ class _SettingsTabState extends State<SettingsTab> {
                 size: 20,
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Language',
-                      style: TextStyle(
+                      AppLocalizations.of(context)!.language,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Choose your preferred language',
-                      style: TextStyle(
+                      AppLocalizations.of(context)!.chooseYourPreferredLanguage,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
                       ),
@@ -255,28 +279,47 @@ class _SettingsTabState extends State<SettingsTab> {
               border: Border.all(color: Colors.grey[300]!),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedLanguage,
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Follow System',
-                    child: Text('Follow System'),
+            child: Consumer<LanguageProvider>(
+              builder: (context, languageProvider, child) {
+                String currentValue = AppLocalizations.of(context)!.followSystem;
+                if (languageProvider.locale?.languageCode == 'en') {
+                  currentValue = AppLocalizations.of(context)!.english;
+                } else if (languageProvider.locale?.languageCode == 'zh') {
+                  currentValue = AppLocalizations.of(context)!.chinese;
+                }
+                
+                return DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: currentValue,
+                    isExpanded: true,
+                    items: [
+                      DropdownMenuItem(
+                        value: AppLocalizations.of(context)!.followSystem,
+                        child: Text(AppLocalizations.of(context)!.followSystem),
+                      ),
+                      DropdownMenuItem(
+                        value: AppLocalizations.of(context)!.english,
+                        child: Text(AppLocalizations.of(context)!.english),
+                      ),
+                      DropdownMenuItem(
+                        value: AppLocalizations.of(context)!.chinese,
+                        child: Text(AppLocalizations.of(context)!.chinese),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        if (value == AppLocalizations.of(context)!.followSystem) {
+                          languageProvider.clearLanguage();
+                        } else if (value == AppLocalizations.of(context)!.english) {
+                          languageProvider.setLanguage(const Locale('en'));
+                        } else if (value == AppLocalizations.of(context)!.chinese) {
+                          languageProvider.setLanguage(const Locale('zh'));
+                        }
+                      }
+                    },
                   ),
-                  DropdownMenuItem(
-                    value: 'English',
-                    child: Text('English'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedLanguage = value;
-                    });
-                  }
-                },
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -380,7 +423,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
               ),
               Text(
-                '${value.round()}s',
+                '${value.round()}${AppLocalizations.of(context)!.timeoutUnit}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -503,18 +546,27 @@ class _SettingsTabState extends State<SettingsTab> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Privacy Policy'),
-        content: const Text(
-          'This app uses WiFi Direct to establish peer-to-peer connections. '
-          'No data is sent to external servers. All communications happen '
-          'directly between devices.',
+        title: Text(AppLocalizations.of(context)!.privacyPolicy),
+        content: Text(
+          AppLocalizations.of(context)!.privacyPolicyContent,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            child: Text(AppLocalizations.of(context)!.ok),
           ),
         ],
+      ),
+    );
+  }
+
+  void _copyToClipboard(String url) {
+    Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.urlCopiedToClipboard(url)),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

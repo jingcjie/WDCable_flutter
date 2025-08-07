@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../models/wifi_direct_models.dart';
 import '../controllers/wifi_direct_controller.dart';
 import '../wifi_direct_service.dart';
@@ -163,7 +164,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
             ),
             if (progress > 0)
               Text(
-                progress >= 1.0 ? 'Complete' : 'In Progress',
+                progress >= 1.0 ? AppLocalizations.of(context)!.complete : AppLocalizations.of(context)!.inProgress,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: progress >= 1.0 ? Colors.green : color,
                   fontWeight: FontWeight.w500,
@@ -251,7 +252,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Speed Test Status',
+                  AppLocalizations.of(context)!.speedTestStatus,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -259,8 +260,8 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                 const SizedBox(height: 4),
                 Text(
                   isConnected
-                      ? 'Ready to test connection speed'
-                      : 'Connect to a peer to test speed',
+                      ? AppLocalizations.of(context)!.readyToTestConnectionSpeed
+                      : AppLocalizations.of(context)!.connectToPeerToTestSpeed,
                   style: TextStyle(
                     color: isConnected ? Colors.green : Colors.red,
                     fontSize: 12,
@@ -328,7 +329,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              _isTestRunning ? 'Testing...' : 'START',
+                              _isTestRunning ? AppLocalizations.of(context)!.testing : AppLocalizations.of(context)!.start,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -348,8 +349,8 @@ class _SpeedTestTabState extends State<SpeedTestTab>
               _isTestRunning
                   ? _currentTestPhase
                   : isConnected
-                      ? 'Tap to start speed test'
-                      : 'Connect to a peer first',
+                      ? AppLocalizations.of(context)!.tapToStartSpeedTest
+                      : AppLocalizations.of(context)!.connectToPeerFirst,
               style: TextStyle(
                 color: isConnected ? null : Colors.grey,
                 fontSize: 14,
@@ -385,7 +386,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                 const Icon(Icons.analytics, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Latest Results',
+                  AppLocalizations.of(context)!.latestResults,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -399,7 +400,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                   Expanded(
                     child: _buildSpeedCard(
                       context,
-                      'Download',
+                      AppLocalizations.of(context)!.download,
                       lastResult.downloadSpeed,
                       Icons.download,
                       Colors.blue,
@@ -409,7 +410,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                   Expanded(
                     child: _buildSpeedCard(
                       context,
-                      'Upload',
+                      AppLocalizations.of(context)!.upload,
                       lastResult.uploadSpeed,
                       Icons.upload,
                       Colors.green,
@@ -430,7 +431,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                 child: Column(
                   children: [
                     Text(
-                      'Test completed at',
+                      AppLocalizations.of(context)!.testCompletedAt,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[600],
@@ -460,7 +461,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'No test results yet',
+                      AppLocalizations.of(context)!.noTestResultsYet,
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey[600],
@@ -468,7 +469,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Run a speed test to see results here',
+                      AppLocalizations.of(context)!.runSpeedTestToSeeResults,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[500],
@@ -544,14 +545,14 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                 const Icon(Icons.history, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Test History',
+                  AppLocalizations.of(context)!.testHistory,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const Spacer(),
                 Text(
-                  '${widget.state.speedTestResults.length} tests',
+                  AppLocalizations.of(context)!.tests(widget.state.speedTestResults.length),
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
@@ -573,7 +574,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'No test history',
+                      AppLocalizations.of(context)!.noTestHistory,
                       style: TextStyle(
                         color: Colors.grey[600],
                       ),
@@ -630,13 +631,19 @@ class _SpeedTestTabState extends State<SpeedTestTab>
     final difference = now.difference(dateTime);
     
     if (difference.inDays > 0) {
-      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+      return difference.inDays == 1 
+          ? AppLocalizations.of(context)!.dayAgo(difference.inDays)
+                : AppLocalizations.of(context)!.daysAgoLong(difference.inDays);
     } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
+      return difference.inHours == 1
+          ? AppLocalizations.of(context)!.hourAgo(difference.inHours)
+                : AppLocalizations.of(context)!.hoursAgoLong(difference.inHours);
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
+      return difference.inMinutes == 1
+          ? AppLocalizations.of(context)!.minuteAgo(difference.inMinutes)
+                : AppLocalizations.of(context)!.minutesAgoLong(difference.inMinutes);
     } else {
-      return 'Just now';
+      return AppLocalizations.of(context)!.justNow;
     }
   }
 }

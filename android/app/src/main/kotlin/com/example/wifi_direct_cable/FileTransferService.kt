@@ -304,6 +304,8 @@ class FileTransferService(
                     var currentFileOutputStream: FileOutputStream? = null
                     var currentFilePath: String? = null
                     
+                    var headerBuffer = ByteArray(0)
+                    
                     while (!socket.isClosed && socket.isConnected) {
                         try {
                             val bytesRead = input.read(buffer)
@@ -311,17 +313,22 @@ class FileTransferService(
                                 totalBytesReceived += bytesRead
                                 
                                 if (!isReceivingFile) {
-                                    // Look for file header
-                                    val data = String(buffer, 0, bytesRead)
-                                    mainHandler.post {
-                                        methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - received data: ${data.take(50)}...")
-                                    }
+                                    // Accumulate bytes until we find the complete header
+                                    headerBuffer += buffer.sliceArray(0 until bytesRead)
                                     
-                                    if (data.startsWith("FILE:")) {
-                                        // Handle file transfer protocol
-                                        val headerEnd = data.indexOf('\n')
-                                        if (headerEnd != -1) {
-                                            val header = data.substring(0, headerEnd)
+                                    // Look for newline character to find end of header
+                                    val newlineIndex = headerBuffer.indexOf(10) // 10 is ASCII for '\n'
+                                    if (newlineIndex != -1) {
+                                        // Extract header as string (only the header part)
+                                        val headerBytes = headerBuffer.sliceArray(0 until newlineIndex)
+                                        val header = String(headerBytes, Charsets.UTF_8)
+                                        
+                                        mainHandler.post {
+                                            methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - received header: $header")
+                                        }
+                                        
+                                        if (header.startsWith("FILE:")) {
+                                            // Handle file transfer protocol
                                             val parts = header.split(":")
                                             if (parts.size >= 3) {
                                                 currentFileName = parts[1]
@@ -331,22 +338,26 @@ class FileTransferService(
                                                 
                                                 // Create file in Downloads directory
                                                 try {
-                                                    // Check storage permissions before creating file
-                                                    if (permissionManager?.hasStoragePermission() != true) {
-                                                        mainHandler.post {
-                                                            methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - storage permission denied, cannot create file")
-                                                            methodChannel.invokeMethod("onError", "Storage permission required to save files")
+                                                    // Use app's private external storage directory for compatibility
+                                                    // This doesn't require special permissions on Android 10+
+                                                    val appExternalDir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                                                    if (appExternalDir != null) {
+                                                        if (!appExternalDir.exists()) {
+                                                            appExternalDir.mkdirs()
                                                         }
-                                                        isReceivingFile = false
+                                                        val file = File(appExternalDir, currentFileName)
+                                                        currentFilePath = file.absolutePath
+                                                        currentFileOutputStream = FileOutputStream(file)
+                                                    } else {
+                                                        // Fallback to internal storage if external is not available
+                                                        val internalDir = File(activity.filesDir, "downloads")
+                                                        if (!internalDir.exists()) {
+                                                            internalDir.mkdirs()
+                                                        }
+                                                        val file = File(internalDir, currentFileName)
+                                                        currentFilePath = file.absolutePath
+                                                        currentFileOutputStream = FileOutputStream(file)
                                                     }
-                                                    
-                                                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                                                    if (!downloadsDir.exists()) {
-                                                        downloadsDir.mkdirs()
-                                                    }
-                                                    val file = File(downloadsDir, currentFileName)
-                                                    currentFilePath = file.absolutePath
-                                                    currentFileOutputStream = FileOutputStream(file)
                                                     
                                                     mainHandler.post {
                                                         methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - created file: $currentFilePath")
@@ -369,13 +380,15 @@ class FileTransferService(
                                                 }
                                                 
                                                 // Handle any file data that came after the header
-                                                val remainingData = bytesRead - (headerEnd + 1)
-                                                if (remainingData > 0) {
+                                                val remainingDataStart = newlineIndex + 1
+                                                val remainingDataLength = headerBuffer.size - remainingDataStart
+                                                if (remainingDataLength > 0) {
                                                     try {
-                                                        currentFileOutputStream?.write(buffer, headerEnd + 1, remainingData)
-                                                        receivedFileData += remainingData
+                                                        val remainingData = headerBuffer.sliceArray(remainingDataStart until headerBuffer.size)
+                                                        currentFileOutputStream?.write(remainingData)
+                                                        receivedFileData += remainingDataLength
                                                         mainHandler.post {
-                                                            methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - received $remainingData bytes of file data with header")
+                                                            methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - received $remainingDataLength bytes of file data with header")
                                                         }
                                                     } catch (e: Exception) {
                                                         mainHandler.post {
@@ -383,9 +396,32 @@ class FileTransferService(
                                                         }
                                                     }
                                                 }
-                                            }
-                                        }
-                                    }
+                                                
+                                                // Clear header buffer since we've processed it
+                                                 headerBuffer = ByteArray(0)
+                                             } else {
+                                                 mainHandler.post {
+                                                     methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - invalid header format: $header")
+                                                 }
+                                                 // Reset header buffer for invalid header
+                                                 headerBuffer = ByteArray(0)
+                                             }
+                                         } else {
+                                             mainHandler.post {
+                                                 methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - header does not start with FILE: $header")
+                                             }
+                                             // Reset header buffer for non-file data
+                                             headerBuffer = ByteArray(0)
+                                         }
+                                     } else {
+                                         // Header not complete yet, check if buffer is getting too large
+                                         if (headerBuffer.size > 1024) {
+                                             mainHandler.post {
+                                                 methodChannel.invokeMethod("onDebug", "FileTransfer: Listener - header buffer too large, resetting")
+                                             }
+                                             headerBuffer = ByteArray(0)
+                                         }
+                                     }
                                 } else {
                                     // Receiving file data
                                     try {

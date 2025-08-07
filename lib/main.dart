@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'controllers/wifi_direct_controller.dart';
 import 'models/wifi_direct_models.dart';
 import 'widgets/connection_tab.dart';
@@ -10,11 +11,16 @@ import 'widgets/file_transfer_tab.dart';
 import 'widgets/settings_tab.dart';
 import 'wifi_direct_service.dart';
 import 'theme/theme_provider.dart';
+import 'providers/language_provider.dart';
+import 'package:wifi_direct_cable/l10n/app_localizations.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => LanguageProvider()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -25,13 +31,24 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
+    return Consumer2<ThemeProvider, LanguageProvider>(
+      builder: (context, themeProvider, languageProvider, child) {
         return MaterialApp(
           title: 'WiFi Direct Cable',
           theme: AppThemes.lightTheme,
           darkTheme: AppThemes.darkTheme,
           themeMode: themeProvider.themeMode,
+          locale: languageProvider.locale,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('en'),
+            Locale('zh'),
+          ],
           home: const WiFiDirectHomePage(),
         );
       },

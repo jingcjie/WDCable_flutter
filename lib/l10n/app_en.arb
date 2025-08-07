@@ -1,0 +1,536 @@
+{
+  "@@locale": "en",
+  "appTitle": "WiFi Direct Cable",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  "wifiP2pDriver": "WiFi P2P Driver",
+  "@wifiP2pDriver": {
+    "description": "WiFi P2P driver status label"
+  },
+  "readyForConnections": "Ready for connections",
+  "@readyForConnections": {
+    "description": "Status when WiFi P2P is enabled"
+  },
+  "disabledEnableWifi": "Disabled - Enable WiFi to continue",
+  "@disabledEnableWifi": {
+    "description": "Status when WiFi P2P is disabled"
+  },
+  "connectionStatus": "Connection Status",
+  "@connectionStatus": {
+    "description": "Connection status label"
+  },
+  "connected": "Connected",
+  "@connected": {
+    "description": "Connected status"
+  },
+  "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Disconnected status"
+  },
+  "scanForDevices": "Scan for Devices",
+  "@scanForDevices": {
+    "description": "Button text to scan for devices"
+  },
+  "scanning": "Scanning...",
+  "@scanning": {
+    "description": "Text shown when scanning for devices"
+  },
+  "stopScan": "Stop Scan",
+  "@stopScan": {
+    "description": "Button text to stop scanning"
+  },
+  "deviceInfo": "Device Info",
+  "@deviceInfo": {
+    "description": "Button text to show device information"
+  },
+  "resetWifiDirect": "Reset WiFi Direct",
+  "@resetWifiDirect": {
+    "description": "Button text to reset WiFi Direct"
+  },
+  "noDevicesFound": "No devices found",
+  "@noDevicesFound": {
+    "description": "Message when no devices are found"
+  },
+  "tapScanForDevices": "Tap \"Scan for Devices\" to find nearby devices",
+  "@tapScanForDevices": {
+    "description": "Instruction text for scanning devices"
+  },
+  "availableDevices": "Available Devices ({count})",
+  "@availableDevices": {
+    "description": "Header for available devices list",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "description": "Number of available devices"
+      }
+    }
+  },
+  "connect": "Connect",
+  "@connect": {
+    "description": "Button text to connect to a device"
+  },
+  "disconnect": "Disconnect",
+  "@disconnect": {
+    "description": "Button text to disconnect from a device"
+  },
+  "logs": "Logs",
+  "@logs": {
+    "description": "Logs section header"
+  },
+  "clearLogs": "Clear Logs",
+  "@clearLogs": {
+    "description": "Button text to clear logs"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Chat tab label"
+  },
+  "speedTest": "Speed Test",
+  "@speedTest": {
+    "description": "Speed test tab label"
+  },
+  "fileTransfer": "File Transfer",
+  "@fileTransfer": {
+    "description": "File transfer tab label"
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings tab label"
+  },
+  "connectedReadyToChat": "Connected - Ready to chat",
+  "@connectedReadyToChat": {
+    "description": "Status when connected and ready to chat"
+  },
+  "notConnectedConnectToPeer": "Not connected - Connect to a peer to start chatting",
+  "@notConnectedConnectToPeer": {
+    "description": "Status when not connected to peer"
+  },
+  "host": "Host",
+  "@host": {
+    "description": "Host role indicator"
+  },
+  "client": "Client",
+  "@client": {
+    "description": "Client role indicator"
+  },
+  "noMessagesYet": "No messages yet",
+  "@noMessagesYet": {
+    "description": "Message when no chat messages exist"
+  },
+  "connectToPeerAndStartChatting": "Connect to a peer and start chatting!",
+  "@connectToPeerAndStartChatting": {
+    "description": "Instruction to connect and start chatting"
+  },
+  "speedTest": "Speed Test",
+  "@speedTest": {
+    "description": "Speed test label in chat"
+  },
+  "typeAMessage": "Type a message...",
+  "@typeAMessage": {
+    "description": "Chat input placeholder when connected"
+  },
+  "connectToStartChatting": "Connect to start chatting",
+  "@connectToStartChatting": {
+    "description": "Chat input placeholder when not connected"
+  },
+  "justNow": "Just now",
+  "@justNow": {
+    "description": "Timestamp for very recent messages"
+  },
+  "daysAgo": "{count}d ago",
+  "@daysAgo": {
+    "description": "Days ago timestamp",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgo": "{count}h ago",
+  "@hoursAgo": {
+    "description": "Hours ago timestamp",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "minutesAgo": "{count}m ago",
+  "@minutesAgo": {
+    "description": "Minutes ago timestamp",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pleaseConnectToPeerFirst": "Please connect to a peer first",
+  "@pleaseConnectToPeerFirst": {
+    "description": "Error message when trying to send file without connection"
+  },
+  "fileSent": "File sent: {fileName}",
+  "@fileSent": {
+    "description": "Success message when file is sent",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendFile": "Failed to send file: {error}",
+  "@failedToSendFile": {
+    "description": "Error message when file send fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notConnected": "Not Connected",
+  "@notConnected": {
+    "description": "Connection status when not connected"
+  },
+  "readyForFileTransfer": "Ready for file transfer",
+  "@readyForFileTransfer": {
+    "description": "Status when ready for file transfer"
+  },
+  "connectToStartTransferringFiles": "Connect to start transferring files",
+  "@connectToStartTransferringFiles": {
+    "description": "Instruction when not connected"
+  },
+  "sendFile": "Send File",
+  "@sendFile": {
+    "description": "Send file button text"
+  },
+  "receiveFiles": "Receive Files",
+  "@receiveFiles": {
+    "description": "Receive files section title"
+  },
+  "filesWillBeAutomaticallyReceived": "Files will be automatically received when sent by peer",
+  "@filesWillBeAutomaticallyReceived": {
+    "description": "Description of automatic file receiving"
+  },
+  "noActiveTransfers": "No Active Transfers",
+  "@noActiveTransfers": {
+    "description": "Message when no file transfers are active"
+  },
+  "uploadComplete": "Upload Complete",
+  "@uploadComplete": {
+    "description": "Status when upload is complete"
+  },
+  "downloadComplete": "Download Complete",
+  "@downloadComplete": {
+    "description": "Status when download is complete"
+  },
+  "uploading": "Uploading...",
+  "@uploading": {
+    "description": "Status when uploading"
+  },
+  "downloading": "Downloading...",
+  "@downloading": {
+    "description": "Status when downloading"
+  },
+  "recentTransfers": "Recent Transfers",
+  "@recentTransfers": {
+    "description": "Recent transfers section title"
+  },
+  "noRecentTransfers": "No recent transfers",
+  "@noRecentTransfers": {
+    "description": "Message when no recent transfers exist"
+  },
+  "sent": "Sent",
+  "@sent": {
+    "description": "Label for sent files"
+  },
+  "received": "Received",
+  "@received": {
+    "description": "Label for received files"
+  },
+  "openFile": "Open file",
+  "@openFile": {
+    "description": "Tooltip for open file button"
+  },
+  "clear": "Clear",
+  "@clear": {
+    "description": "Tooltip for clear button"
+  },
+  "failedToOpenFile": "Failed to open file: {error}",
+  "@failedToOpenFile": {
+    "description": "Error message when file open fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "systemLogs": "System Logs",
+  "@systemLogs": {
+    "description": "System logs section header"
+  },
+  "noLogsYet": "No logs yet",
+  "@noLogsYet": {
+    "description": "Message when no logs exist"
+  },
+  "customizeYourWifiDirectExperience": "Customize your WiFi Direct experience",
+  "@customizeYourWifiDirectExperience": {
+    "description": "Settings page subtitle"
+  },
+  "transferSettings": "Transfer Settings",
+  "@transferSettings": {
+    "description": "Transfer settings section title"
+  },
+  "transferTimeout": "Transfer Timeout",
+  "@transferTimeout": {
+    "description": "Transfer timeout setting title"
+  },
+  "timeoutForFileTransfers": "Timeout for file transfers (seconds)",
+  "@timeoutForFileTransfers": {
+    "description": "Transfer timeout setting description"
+  },
+  "appSettings": "App Settings",
+  "@appSettings": {
+    "description": "App settings section title"
+  },
+  "language": "Language",
+  "@language": {
+    "description": "Language setting title"
+  },
+  "chooseYourPreferredLanguage": "Choose your preferred language",
+  "@chooseYourPreferredLanguage": {
+    "description": "Language setting description"
+  },
+  "followSystem": "Follow System",
+  "@followSystem": {
+    "description": "Follow system language option"
+  },
+  "english": "English",
+  "@english": {
+    "description": "English language option"
+  },
+  "darkMode": "Dark Mode",
+  "@darkMode": {
+    "description": "Dark mode setting title"
+  },
+  "useDarkTheme": "Use dark theme",
+  "@useDarkTheme": {
+    "description": "Dark mode setting description"
+  },
+  "about": "About",
+  "@about": {
+    "description": "About section title"
+  },
+  "version": "Version",
+  "@version": {
+    "description": "Version info title"
+  },
+  "privacyPolicy": "Privacy Policy",
+  "@privacyPolicy": {
+    "description": "Privacy policy title"
+  },
+  "viewOurPrivacyPolicy": "View our privacy policy",
+  "@viewOurPrivacyPolicy": {
+    "description": "Privacy policy description"
+  },
+  "privacyPolicyContent": "This app uses WiFi Direct to establish peer-to-peer connections. No data is sent to external servers. All communications happen directly between devices.",
+  "@privacyPolicyContent": {
+    "description": "Privacy policy dialog content"
+  },
+  "ok": "OK",
+  "@ok": {
+    "description": "OK button text"
+  },
+  "speedTestStatus": "Speed Test Status",
+  "@speedTestStatus": {
+    "description": "Speed test status title"
+  },
+  "readyToTestConnectionSpeed": "Ready to test connection speed",
+  "@readyToTestConnectionSpeed": {
+    "description": "Status when ready to test speed"
+  },
+  "connectToPeerToTestSpeed": "Connect to a peer to test speed",
+  "@connectToPeerToTestSpeed": {
+    "description": "Status when not connected for speed test"
+  },
+  "testing": "Testing...",
+  "@testing": {
+    "description": "Speed test in progress text"
+  },
+  "start": "START",
+  "@start": {
+    "description": "Start speed test button text"
+  },
+  "tapToStartSpeedTest": "Tap to start speed test",
+  "@tapToStartSpeedTest": {
+    "description": "Instruction to start speed test"
+  },
+  "connectToPeerFirst": "Connect to a peer first",
+  "@connectToPeerFirst": {
+    "description": "Instruction when not connected"
+  },
+  "downloadTest": "Download Test",
+  "@downloadTest": {
+    "description": "Download test phase label"
+  },
+  "uploadTest": "Upload Test",
+  "@uploadTest": {
+    "description": "Upload test phase label"
+  },
+  "download": "Download",
+  "@download": {
+    "description": "Download label"
+  },
+  "upload": "Upload",
+  "@upload": {
+    "description": "Upload label"
+  },
+  "speed": "Speed: {speed} MB/s",
+  "@speed": {
+    "description": "Speed display format",
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "complete": "Complete",
+  "@complete": {
+    "description": "Complete status"
+  },
+  "inProgress": "In Progress",
+  "@inProgress": {
+    "description": "In progress status"
+  },
+  "latestResults": "Latest Results",
+  "@latestResults": {
+    "description": "Latest results section title"
+  },
+  "testCompletedAt": "Test completed at",
+  "@testCompletedAt": {
+    "description": "Test completion time label"
+  },
+  "noTestResultsYet": "No test results yet",
+  "@noTestResultsYet": {
+    "description": "Message when no test results exist"
+  },
+  "runSpeedTestToSeeResults": "Run a speed test to see results here",
+  "@runSpeedTestToSeeResults": {
+    "description": "Instruction to run speed test"
+  },
+  "testHistory": "Test History",
+  "@testHistory": {
+    "description": "Test history section title"
+  },
+  "tests": "{count} tests",
+  "@tests": {
+    "description": "Number of tests format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noTestHistory": "No test history",
+  "@noTestHistory": {
+    "description": "Message when no test history exists"
+  },
+  "dayAgo": "{count} day ago",
+  "@dayAgo": {
+    "description": "Single day ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgoLong": "{count} days ago",
+  "@daysAgoLong": {
+    "description": "Multiple days ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hourAgo": "{count} hour ago",
+  "@hourAgo": {
+    "description": "Single hour ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgoLong": "{count} hours ago",
+  "@hoursAgoLong": {
+    "description": "Multiple hours ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "minuteAgo": "{count} minute ago",
+  "@minuteAgo": {
+    "description": "Single minute ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "minutesAgoLong": "{count} minutes ago",
+  "@minutesAgoLong": {
+    "description": "Multiple minutes ago format",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeoutUnit": "s",
+  "@timeoutUnit": {
+    "description": "Unit for timeout (seconds)"
+  },
+  "chinese": "中文",
+  "@chinese": {
+    "description": "Chinese language option"
+  },
+  "githubRepositories": "GitHub Repositories",
+  "@githubRepositories": {
+    "description": "GitHub repositories section title"
+  },
+  "flutterAppRepository": "Flutter App Repository",
+  "@flutterAppRepository": {
+    "description": "Flutter app repository title"
+  },
+  "flutterAppDescription": "WDCable Flutter - Mobile WiFi Direct file transfer app",
+  "@flutterAppDescription": {
+    "description": "Flutter app repository description"
+  },
+  "windowsAppRepository": "Windows App Repository",
+  "@windowsAppRepository": {
+    "description": "Windows app repository title"
+  },
+  "windowsAppDescription": "WDCableWUI - Windows companion application",
+  "@windowsAppDescription": {
+    "description": "Windows app repository description"
+  },
+  "urlCopiedToClipboard": "URL copied to clipboard: {url}",
+  "@urlCopiedToClipboard": {
+    "description": "Message shown when URL is copied to clipboard",
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Settings page title"
+  },
+  "settingsSubtitle": "Customize your WiFi Direct experience",
+  "@settingsSubtitle": {
+    "description": "Settings page subtitle"
+  }
+}

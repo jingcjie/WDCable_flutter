@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/app_localizations.dart';
 import '../controllers/wifi_direct_controller.dart';
 import '../models/wifi_direct_models.dart';
 
@@ -52,7 +53,7 @@ class _FileTransferTabState extends State<FileTransferTab>
 
   Future<void> _pickAndSendFile() async {
     if (widget.state.connectionInfo?.isConnected != true) {
-      _showSnackBar('Please connect to a peer first', Colors.orange);
+      _showSnackBar(AppLocalizations.of(context)!.pleaseConnectToPeerFirst, Colors.orange);
       return;
     }
 
@@ -67,13 +68,13 @@ class _FileTransferTabState extends State<FileTransferTab>
         
         _uploadAnimationController.forward();
         await widget.controller.sendFile(filePath, fileName: fileName);
-        _showSnackBar('File sent: $fileName', Colors.green);
+        _showSnackBar(AppLocalizations.of(context)!.fileSent(fileName), Colors.green);
         _uploadAnimationController.reverse();
       }
       // If result is null (no file selected), just return without showing error
     } catch (e) {
       _uploadAnimationController.reverse();
-      _showSnackBar('Failed to send file: $e', Colors.red);
+      _showSnackBar(AppLocalizations.of(context)!.failedToSendFile(e.toString()), Colors.red);
     }
   }
 
@@ -159,7 +160,7 @@ class _FileTransferTabState extends State<FileTransferTab>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isConnected ? 'Connected' : 'Not Connected',
+                  isConnected ? AppLocalizations.of(context)!.connected : AppLocalizations.of(context)!.notConnected,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -168,8 +169,8 @@ class _FileTransferTabState extends State<FileTransferTab>
                 ),
                 Text(
                   isConnected 
-                      ? 'Ready for file transfer'
-                      : 'Connect to start transferring files',
+                      ? AppLocalizations.of(context)!.readyForFileTransfer
+                      : AppLocalizations.of(context)!.connectToStartTransferringFiles,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
@@ -218,7 +219,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Send File',
+                        AppLocalizations.of(context)!.sendFile,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -255,7 +256,7 @@ class _FileTransferTabState extends State<FileTransferTab>
               ),
               const SizedBox(height: 8),
               Text(
-                'Receive Files',
+                AppLocalizations.of(context)!.receiveFiles,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -264,7 +265,7 @@ class _FileTransferTabState extends State<FileTransferTab>
               ),
               const SizedBox(height: 4),
               Text(
-                'Files will be automatically received when sent by peer',
+                AppLocalizations.of(context)!.filesWillBeAutomaticallyReceived,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
@@ -300,7 +301,7 @@ class _FileTransferTabState extends State<FileTransferTab>
             ),
             const SizedBox(height: 8),
             Text(
-              'No Active Transfers',
+              AppLocalizations.of(context)!.noActiveTransfers,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -356,7 +357,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                     icon: const Icon(Icons.open_in_new),
                     iconSize: 20,
                     color: theme.colorScheme.primary,
-                    tooltip: 'Open file',
+                    tooltip: AppLocalizations.of(context)!.openFile,
                     style: IconButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
                       padding: const EdgeInsets.all(8),
@@ -368,7 +369,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                   icon: const Icon(Icons.clear),
                   iconSize: 20,
                   color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  tooltip: 'Clear',
+                  tooltip: AppLocalizations.of(context)!.clear,
                   style: IconButton.styleFrom(
                     backgroundColor: theme.colorScheme.surface,
                     padding: const EdgeInsets.all(8),
@@ -398,8 +399,8 @@ class _FileTransferTabState extends State<FileTransferTab>
               ),
               Text(
                 currentTransfer.isCompleted
-                    ? (currentTransfer.isUploading ? 'Upload Complete' : 'Download Complete')
-                    : (currentTransfer.isUploading ? 'Uploading...' : 'Downloading...'),
+                    ? (currentTransfer.isUploading ? AppLocalizations.of(context)!.uploadComplete : AppLocalizations.of(context)!.downloadComplete)
+                    : (currentTransfer.isUploading ? AppLocalizations.of(context)!.uploading : AppLocalizations.of(context)!.downloading),
                 style: TextStyle(
                   fontSize: 12,
                   color: currentTransfer.isCompleted 
@@ -422,7 +423,7 @@ class _FileTransferTabState extends State<FileTransferTab>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recent Transfers',
+          AppLocalizations.of(context)!.recentTransfers,
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -451,7 +452,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'No recent transfers',
+                  AppLocalizations.of(context)!.noRecentTransfers,
                   style: TextStyle(
                     fontSize: 14,
                     color: theme.colorScheme.onSurface.withOpacity(0.7),
@@ -508,7 +509,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${transfer.isUploading ? "Sent" : "Received"} • ${_formatFileSize(transfer.fileSize)}',
+                  '${transfer.isUploading ? AppLocalizations.of(context)!.sent : AppLocalizations.of(context)!.received} • ${_formatFileSize(transfer.fileSize)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -526,7 +527,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                 icon: const Icon(Icons.open_in_new),
                 iconSize: 20,
                 color: theme.colorScheme.primary,
-                tooltip: 'Open file',
+                tooltip: AppLocalizations.of(context)!.openFile,
                 style: IconButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
                   padding: const EdgeInsets.all(8),
@@ -549,7 +550,7 @@ class _FileTransferTabState extends State<FileTransferTab>
       const platform = MethodChannel('wifi_direct_cable');
       await platform.invokeMethod('openFile', {'filePath': filePath});
     } catch (e) {
-      _showSnackBar('Failed to open file: $e', Colors.red);
+      _showSnackBar(AppLocalizations.of(context)!.failedToOpenFile(e.toString()), Colors.red);
     }
   }
 

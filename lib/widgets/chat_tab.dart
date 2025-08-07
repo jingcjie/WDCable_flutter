@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../models/wifi_direct_models.dart';
 import '../controllers/wifi_direct_controller.dart';
 
@@ -92,8 +93,8 @@ class _ChatTabState extends State<ChatTab> {
           Expanded(
             child: Text(
               isConnected
-                  ? 'Connected - Ready to chat'
-                  : 'Not connected - Connect to a peer to start chatting',
+                  ? AppLocalizations.of(context)!.connectedReadyToChat
+                  : AppLocalizations.of(context)!.notConnectedConnectToPeer,
               style: TextStyle(
                 color: isConnected ? Colors.green : Colors.orange,
                 fontSize: 12,
@@ -110,7 +111,7 @@ class _ChatTabState extends State<ChatTab> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                widget.state.connectionInfo!.isGroupOwner ? 'Host' : 'Client',
+                widget.state.connectionInfo!.isGroupOwner ? AppLocalizations.of(context)!.host : AppLocalizations.of(context)!.client,
                 style: const TextStyle(
                   fontSize: 10,
                   color: Colors.green,
@@ -137,7 +138,7 @@ class _ChatTabState extends State<ChatTab> {
             ),
             const SizedBox(height: 16),
             Text(
-              'No messages yet',
+              AppLocalizations.of(context)!.noMessagesYet,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
@@ -146,7 +147,7 @@ class _ChatTabState extends State<ChatTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Connect to a peer and start chatting!',
+              AppLocalizations.of(context)!.connectToPeerAndStartChatting,
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey[500],
@@ -229,7 +230,7 @@ class _ChatTabState extends State<ChatTab> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Speed Test',
+                          AppLocalizations.of(context)!.speedTest,
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.purple[700],
@@ -309,8 +310,8 @@ class _ChatTabState extends State<ChatTab> {
               enabled: isConnected,
               decoration: InputDecoration(
                 hintText: isConnected
-                    ? 'Type a message...'
-                    : 'Connect to start chatting',
+                    ? AppLocalizations.of(context)!.typeAMessage
+                    : AppLocalizations.of(context)!.connectToStartChatting,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide(
@@ -363,15 +364,15 @@ class _ChatTabState extends State<ChatTab> {
   String _formatTimestamp(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
-    
+
     if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
+      return AppLocalizations.of(context)!.daysAgo(difference.inDays);
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
+      return AppLocalizations.of(context)!.hoursAgo(difference.inHours);
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
+      return AppLocalizations.of(context)!.minutesAgo(difference.inMinutes);
     } else {
-      return 'Just now';
+      return AppLocalizations.of(context)!.justNow;
     }
   }
 }
