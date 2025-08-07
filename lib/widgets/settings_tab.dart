@@ -174,7 +174,7 @@ class _SettingsTabState extends State<SettingsTab> {
             [
               _buildInfoTile(
                 AppLocalizations.of(context)!.version,
-                '1.0.1',
+                '1.2.1',
                 Icons.info_outline,
               ),
               _buildActionTile(
