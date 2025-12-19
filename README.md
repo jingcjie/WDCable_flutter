@@ -67,6 +67,32 @@ To get a local copy up and running, follow these simple steps.
     flutter run
     ```
 
+### Building on windows:
+
+Enable developer mode. You can run `start ms-settings:developers` in console
+
+In root directory, run:
+
+`dart run msix:create`
+
+This will create both flutter exe and msix package
+
+In admin powershell, go to `build\windows\x64\runner\Release`
+
+run:
+
+`Add-AppxPackage -Path ".\wifi_direct_cable.msix" -AllowUnsigned`
+
+note: this only works on windows 11: https://learn.microsoft.com/en-us/windows/msix/package/unsigned-package
+
+To remove the pacakge, run:
+
+`Get-AppxPackage *WDCable* | Remove-AppxPackage`
+
+In the app, wait until you get "Native: All Sockets Ready" in system logs before communiacting. See aslo connection_tips.txt.
+
+Linux is not yet supported
+
 ## 🤝 Contributing
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.

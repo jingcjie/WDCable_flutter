@@ -158,18 +158,20 @@ class _ChatTabState extends State<ChatTab> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-      ),
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        itemCount: widget.state.chatMessages.length,
-        itemBuilder: (context, index) {
-          final message = widget.state.chatMessages[index];
-          return _buildMessageBubble(context, message);
-        },
+    return SelectionArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+        ),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: widget.state.chatMessages.length,
+          itemBuilder: (context, index) {
+            final message = widget.state.chatMessages[index];
+            return _buildMessageBubble(context, message);
+          },
+        ),
       ),
     );
   }

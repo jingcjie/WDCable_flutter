@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:wifi_direct_cable/windows_msix_manager.dart';
+import 'package:wifi_direct_cable/widgets/setup_required_page.dart';
 import 'controllers/wifi_direct_controller.dart';
 import 'models/wifi_direct_models.dart';
 import 'widgets/connection_tab.dart';
@@ -14,20 +16,72 @@ import 'theme/theme_provider.dart';
 import 'providers/language_provider.dart';
 import 'package:wifi_direct_cable/l10n/app_localizations.dart';
 
-void main() {
+import 'package:geolocator/geolocator.dart';
+
+import 'dart:io';
+
+void main() async {
+  // 1. Essential: Initialize bindings for native calls
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Default: Assume identity is fine (Android/iOS)
+  bool hasIdentity = true;
+
+  // 2. Windows-Specific Logic
+  if (Platform.isWindows) {
+    // A. Force Windows to unblock WiFi Direct privacy via Location
+    try {
+      await _prepareLocation();
+    } catch (e) {
+      debugPrint("Windows Location Prep Warning: $e");
+    }
+
+    // B. Check if we are running with Package Identity (MSIX/Sparse)
+    hasIdentity = WindowsMsixManager.hasPackageIdentity();
+  }
+
+  // 3. Launch App
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
         ChangeNotifierProvider(create: (context) => LanguageProvider()),
       ],
-      child: const MyApp(),
+      child: MyApp(initialRoute: hasIdentity ? '/main' : '/setup'),
     ),
   );
 }
 
+/// Windows-only helper to trigger the system privacy consent dialog.
+/// This "opens the gate" for the C++ WiFi Direct APIs.
+Future<void> _prepareLocation() async {
+  // If location services are totally disabled on the PC, we can't do much
+  bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  if (!serviceEnabled) return;
+
+  LocationPermission permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+
+  // Optional: Trigger a low-power position request to ensure 
+  // the OS links this process identity to the location permission.
+  if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+    try {
+      await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+      ).timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // We don't actually need the coordinates, just the permission handshake
+    }
+  }
+}
+
+
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String initialRoute;
+  
+  const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +103,12 @@ class MyApp extends StatelessWidget {
             Locale('en'),
             Locale('zh'),
           ],
-          home: const WiFiDirectHomePage(),
+          // Use routes to handle the two different startup screens
+          initialRoute: initialRoute,
+          routes: {
+            '/main': (context) => const WiFiDirectHomePage(),
+            '/setup': (context) => const SetupRequiredPage(),
+          },
         );
       },
     );

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../models/wifi_direct_models.dart';
 import '../controllers/wifi_direct_controller.dart';
@@ -15,8 +17,9 @@ class ConnectionTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
+    return ListView(
+        primary: true,
+      
         children: [
           // WiFi P2P Status
           _buildWifiP2pStatus(context),
@@ -32,8 +35,8 @@ class ConnectionTab extends StatelessWidget {
           // Logs Section
           _buildLogsSection(context),
         ],
-      ),
-    );
+      );
+    
   }
 
   Widget _buildWifiP2pStatus(BuildContext context) {
@@ -128,6 +131,21 @@ class ConnectionTab extends StatelessWidget {
         children: [
           Row(
             children: [
+              Platform.isWindows && 1 == 0? // disable for now
+              Expanded(
+                child: SwitchListTile(
+                  title: const Text("Make PC Discoverable"),
+                  subtitle: const Text("Allow other devices to find this PC"),
+                  secondary: Icon(Icons.broadcast_on_home, 
+                      color: state.isAdvertising ? Colors.blue : Colors.grey),
+                  value: state.isAdvertising,
+                  onChanged: (bool value) {
+                    controller.toggleAdvertising(value);
+                  },
+                ),
+              )
+              :SizedBox(),
+              const Divider(),
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: state.isDiscovering ? null : controller.discoverPeers,
@@ -252,6 +270,7 @@ class ConnectionTab extends StatelessWidget {
           ),
           Expanded(
             child: ListView.separated(
+              physics: ClampingScrollPhysics(), 
               itemCount: state.peers.length,
               separatorBuilder: (context, index) => Divider(
                 height: 1,

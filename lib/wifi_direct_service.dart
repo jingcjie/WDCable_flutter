@@ -115,11 +115,32 @@ class WiFiDirectService {
   WiFiDirectService() {
     _channel.setMethodCallHandler(_handleMethodCall);
   }
+
+  Future<void> startAdvertising() async {
+    try {
+      await _channel.invokeMethod('startAdvertising');
+    } catch (e) {
+      throw Exception('Failed to start advertising: $e');
+    }
+  }
+
+  Future<void> stopAdvertising() async {
+    try {
+      await _channel.invokeMethod('stopAdvertising');
+    } catch (e) {
+      throw Exception('Failed to stop advertising: $e');
+    }
+  }
   
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     try {
+      print("-----------");
+      print("Dart received method: ${call.method}"); 
+      print("call.method: ${call.method}");
+      print("arguemnts: ${call.arguments}");
       switch (call.method) {
         case 'onPeersChanged':
+          print("Raw Peers Data: ${call.arguments}");
           final List<dynamic> peersData = call.arguments;
           final peers = peersData.map((data) => WiFiDirectDevice.fromMap(Map<String, dynamic>.from(data as Map))).toList();
           _eventController.add(PeersChangedEvent(peers));

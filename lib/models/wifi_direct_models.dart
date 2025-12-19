@@ -267,7 +267,9 @@ class WiFiDirectState {
   final List<SpeedTestResult> speedTestResults;
   final FileTransferInfo? currentFileTransfer;
   final List<FileTransferInfo> recentFileTransfers;
-
+  final bool isAdvertising; 
+  
+  
   WiFiDirectState({
     this.isWifiP2pEnabled = false,
     this.isDiscovering = false,
@@ -281,6 +283,7 @@ class WiFiDirectState {
     this.speedTestResults = const [],
     this.currentFileTransfer,
     this.recentFileTransfers = const [],
+    this.isAdvertising = true,
   });
 
   WiFiDirectState copyWith({
@@ -296,6 +299,7 @@ class WiFiDirectState {
     List<SpeedTestResult>? speedTestResults,
     FileTransferInfo? currentFileTransfer,
     List<FileTransferInfo>? recentFileTransfers,
+    bool? isAdvertising,
   }) {
     return WiFiDirectState(
       isWifiP2pEnabled: isWifiP2pEnabled ?? this.isWifiP2pEnabled,
@@ -310,6 +314,7 @@ class WiFiDirectState {
       speedTestResults: speedTestResults ?? this.speedTestResults,
       currentFileTransfer: currentFileTransfer ?? this.currentFileTransfer,
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
+      isAdvertising: isAdvertising ?? this.isAdvertising,
     );
   }
 }

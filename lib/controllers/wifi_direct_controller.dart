@@ -23,6 +23,7 @@ class WiFiDirectController {
   /// Current state
   WiFiDirectState get currentState => _currentState;
   
+  
   WiFiDirectController(this._service) {
     _stateController = StreamController<WiFiDirectState>.broadcast();
     _setupEventListeners();
@@ -34,6 +35,22 @@ class WiFiDirectController {
       _handleEvent(event);
     });
   }
+
+  Future<void> toggleAdvertising(bool enable) async {
+  try {
+    if (enable) {
+      await _service.startAdvertising();
+      _addLog('Started broadcasting (Discoverable)');
+    } else {
+      await _service.stopAdvertising();
+      _addLog('Stopped broadcasting');
+    }
+    _updateState(_currentState.copyWith(isAdvertising: enable));
+  } catch (e) {
+    _addLog('Advertising toggle failed: $e');
+  }
+}
+
   
   void _handleEvent(WiFiDirectEvent event) {
     switch (event.runtimeType) {
@@ -285,6 +302,10 @@ class WiFiDirectController {
     _updateState(_currentState.copyWith(isDiscovering: true));
     
     try {
+      // HACK: Start advertising when we scan, so other devices can see us too.
+      // This maps to the C++ 'startAdvertising' method we wrote.
+      //await _service.startAdvertising(); 
+
       final result = await _service.discoverPeers();
       _addLog(result);
     } catch (e) {

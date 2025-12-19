@@ -1,0 +1,27 @@
+rule to connect:
+
+mobile: press scan
+
+desktop: press scan
+
+mobile: press reset
+
+mobile: press scan
+
+desktop: press cancel
+
+desktop: press scan
+
+attempts: 9
+
+success: 6
+
+fail: 3
+
+Notes: 
+
+connect means device appeared in device list and successfully connected
+
+The routine consistantly gets the device to appear in the device list, it's just the connection that sometimes fails
+
+Performing the routine fast seems to give better results
