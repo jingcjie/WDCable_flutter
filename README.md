@@ -67,7 +67,7 @@ To get a local copy up and running, follow these simple steps.
     flutter run
     ```
 
-### Building on windows:
+### Building on windows (experimental):
 
 Enable developer mode. You can run `start ms-settings:developers` in console
 
