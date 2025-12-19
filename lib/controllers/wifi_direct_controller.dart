@@ -302,10 +302,6 @@ class WiFiDirectController {
     _updateState(_currentState.copyWith(isDiscovering: true));
     
     try {
-      // HACK: Start advertising when we scan, so other devices can see us too.
-      // This maps to the C++ 'startAdvertising' method we wrote.
-      //await _service.startAdvertising(); 
-
       final result = await _service.discoverPeers();
       _addLog(result);
     } catch (e) {
