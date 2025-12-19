@@ -52,10 +52,7 @@ void main() async {
   );
 }
 
-/// Windows-only helper to trigger the system privacy consent dialog.
-/// This "opens the gate" for the C++ WiFi Direct APIs.
 Future<void> _prepareLocation() async {
-  // If location services are totally disabled on the PC, we can't do much
   bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
   if (!serviceEnabled) return;
 
@@ -64,8 +61,6 @@ Future<void> _prepareLocation() async {
     permission = await Geolocator.requestPermission();
   }
 
-  // Optional: Trigger a low-power position request to ensure 
-  // the OS links this process identity to the location permission.
   if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
     try {
       await Geolocator.getCurrentPosition(
