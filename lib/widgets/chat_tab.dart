@@ -7,11 +7,7 @@ class ChatTab extends StatefulWidget {
   final WiFiDirectController controller;
   final WiFiDirectState state;
 
-  const ChatTab({
-    super.key,
-    required this.controller,
-    required this.state,
-  });
+  const ChatTab({super.key, required this.controller, required this.state});
 
   @override
   State<ChatTab> createState() => _ChatTabState();
@@ -56,9 +52,7 @@ class _ChatTabState extends State<ChatTab> {
         // Connection Status Banner
         _buildConnectionBanner(context),
         // Chat Messages
-        Expanded(
-          child: _buildChatMessages(context),
-        ),
+        Expanded(child: _buildChatMessages(context)),
         // Message Input
         _buildMessageInput(context),
       ],
@@ -67,17 +61,17 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildConnectionBanner(BuildContext context) {
     final isConnected = widget.state.connectionInfo?.isConnected == true;
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isConnected
-            ? Colors.green.withOpacity(0.1)
-            : Colors.orange.withOpacity(0.1),
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.orange.withValues(alpha: 0.1),
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -107,11 +101,13 @@ class _ChatTabState extends State<ChatTab> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
+                color: Colors.green.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                widget.state.connectionInfo!.isGroupOwner ? AppLocalizations.of(context)!.host : AppLocalizations.of(context)!.client,
+                widget.state.connectionInfo!.isGroupOwner
+                    ? AppLocalizations.of(context)!.host
+                    : AppLocalizations.of(context)!.client,
                 style: const TextStyle(
                   fontSize: 10,
                   color: Colors.green,
@@ -131,11 +127,7 @@ class _ChatTabState extends State<ChatTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               AppLocalizations.of(context)!.noMessagesYet,
@@ -148,10 +140,7 @@ class _ChatTabState extends State<ChatTab> {
             const SizedBox(height: 8),
             Text(
               AppLocalizations.of(context)!.connectToPeerAndStartChatting,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -159,9 +148,7 @@ class _ChatTabState extends State<ChatTab> {
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface),
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
@@ -177,22 +164,19 @@ class _ChatTabState extends State<ChatTab> {
   Widget _buildMessageBubble(BuildContext context, ChatMessage message) {
     final isOutgoing = message.isSent;
     final isSpeedTest = message.content.startsWith('SPEED_TEST_');
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment:
-            isOutgoing ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isOutgoing
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!isOutgoing) ...[
             CircleAvatar(
               radius: 16,
               backgroundColor: Theme.of(context).colorScheme.secondary,
-              child: const Icon(
-                Icons.person,
-                size: 16,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.person, size: 16, color: Colors.white),
             ),
             const SizedBox(width: 8),
           ],
@@ -201,19 +185,16 @@ class _ChatTabState extends State<ChatTab> {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: isSpeedTest
-                    ? Colors.purple.withOpacity(0.1)
+                    ? Colors.purple.withValues(alpha: 0.1)
                     : isOutgoing
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.surfaceVariant,
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(16),
                 border: isSpeedTest
-                    ? Border.all(color: Colors.purple.withOpacity(0.3))
+                    ? Border.all(color: Colors.purple.withValues(alpha: 0.3))
                     : null,
               ),
               child: Column(
@@ -223,11 +204,7 @@ class _ChatTabState extends State<ChatTab> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.speed,
-                          size: 14,
-                          color: Colors.purple[700],
-                        ),
+                        Icon(Icons.speed, size: 14, color: Colors.purple[700]),
                         const SizedBox(width: 4),
                         Text(
                           AppLocalizations.of(context)!.speedTest,
@@ -247,8 +224,8 @@ class _ChatTabState extends State<ChatTab> {
                       color: isSpeedTest
                           ? Colors.purple[700]
                           : isOutgoing
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
@@ -259,11 +236,9 @@ class _ChatTabState extends State<ChatTab> {
                       color: isSpeedTest
                           ? Colors.purple[500]
                           : isOutgoing
-                              ? Colors.white.withOpacity(0.7)
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant
-                                  .withOpacity(0.7),
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : Theme.of(context).colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.7),
                       fontSize: 10,
                     ),
                   ),
@@ -276,11 +251,7 @@ class _ChatTabState extends State<ChatTab> {
             CircleAvatar(
               radius: 16,
               backgroundColor: Theme.of(context).colorScheme.primary,
-              child: const Icon(
-                Icons.person,
-                size: 16,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.person, size: 16, color: Colors.white),
             ),
           ],
         ],
@@ -290,14 +261,14 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildMessageInput(BuildContext context) {
     final isConnected = widget.state.connectionInfo?.isConnected == true;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
           top: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -321,7 +292,9 @@ class _ChatTabState extends State<ChatTab> {
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.5),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
@@ -336,19 +309,22 @@ class _ChatTabState extends State<ChatTab> {
                   vertical: 12,
                 ),
                 suffixIcon: IconButton(
-                  onPressed: isConnected && _messageController.text.trim().isNotEmpty
+                  onPressed:
+                      isConnected && _messageController.text.trim().isNotEmpty
                       ? _sendMessage
                       : null,
                   icon: Icon(
                     Icons.send,
-                    color: isConnected && _messageController.text.trim().isNotEmpty
+                    color:
+                        isConnected && _messageController.text.trim().isNotEmpty
                         ? Theme.of(context).colorScheme.primary
                         : Colors.grey,
                   ),
                 ),
               ),
               onSubmitted: isConnected ? (_) => _sendMessage() : null,
-              onChanged: (_) => setState(() {}), // Rebuild to update send button state
+              onChanged: (_) =>
+                  setState(() {}), // Rebuild to update send button state
             ),
           ),
         ],

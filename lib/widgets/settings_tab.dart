@@ -11,11 +11,7 @@ class SettingsTab extends StatefulWidget {
   final WiFiDirectController controller;
   final WiFiDirectState state;
 
-  const SettingsTab({
-    super.key,
-    required this.controller,
-    required this.state,
-  });
+  const SettingsTab({super.key, required this.controller, required this.state});
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();
@@ -23,12 +19,6 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   double _transferTimeout = 30.0;
-  String _selectedLanguage = 'Follow System';
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +34,7 @@ class _SettingsTabState extends State<SettingsTab> {
               gradient: LinearGradient(
                 colors: [
                   Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -52,7 +42,9 @@ class _SettingsTabState extends State<SettingsTab> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -63,7 +55,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -155,36 +147,35 @@ class _SettingsTabState extends State<SettingsTab> {
                 AppLocalizations.of(context)!.flutterAppRepository,
                 AppLocalizations.of(context)!.flutterAppDescription,
                 Icons.phone_android,
-                () => _copyToClipboard('https://github.com/jingcjie/WDCable_flutter'),
+                () => _copyToClipboard(
+                  'https://github.com/jingcjie/WDCable_flutter',
+                ),
               ),
               _buildActionTile(
                 AppLocalizations.of(context)!.windowsAppRepository,
                 AppLocalizations.of(context)!.windowsAppDescription,
                 Icons.desktop_windows,
-                () => _copyToClipboard('https://github.com/jingcjie/WDCableWUI'),
+                () =>
+                    _copyToClipboard('https://github.com/jingcjie/WDCableWUI'),
               ),
             ],
           ),
           const SizedBox(height: 20),
 
           // About Section
-          _buildSection(
-            AppLocalizations.of(context)!.about,
-            Icons.info,
-            [
-              _buildInfoTile(
-                AppLocalizations.of(context)!.version,
-                '1.2.1',
-                Icons.info_outline,
-              ),
-              _buildActionTile(
-                AppLocalizations.of(context)!.privacyPolicy,
-                AppLocalizations.of(context)!.viewOurPrivacyPolicy,
-                Icons.privacy_tip,
-                () => _showPrivacyPolicy(),
-              ),
-            ],
-          ),
+          _buildSection(AppLocalizations.of(context)!.about, Icons.info, [
+            _buildInfoTile(
+              AppLocalizations.of(context)!.version,
+              '1.2.1',
+              Icons.info_outline,
+            ),
+            _buildActionTile(
+              AppLocalizations.of(context)!.privacyPolicy,
+              AppLocalizations.of(context)!.viewOurPrivacyPolicy,
+              Icons.privacy_tip,
+              () => _showPrivacyPolicy(),
+            ),
+          ]),
           const SizedBox(height: 40),
         ],
       ),
@@ -198,7 +189,7 @@ class _SettingsTabState extends State<SettingsTab> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.05),
+            color: Theme.of(context).shadowColor.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -241,11 +232,7 @@ class _SettingsTabState extends State<SettingsTab> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.language,
-                color: Colors.grey[600],
-                size: 20,
-              ),
+              Icon(Icons.language, color: Colors.grey[600], size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -261,10 +248,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(height: 2),
                     Text(
                       AppLocalizations.of(context)!.chooseYourPreferredLanguage,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -281,13 +265,15 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
             child: Consumer<LanguageProvider>(
               builder: (context, languageProvider, child) {
-                String currentValue = AppLocalizations.of(context)!.followSystem;
+                String currentValue = AppLocalizations.of(
+                  context,
+                )!.followSystem;
                 if (languageProvider.locale?.languageCode == 'en') {
                   currentValue = AppLocalizations.of(context)!.english;
                 } else if (languageProvider.locale?.languageCode == 'zh') {
                   currentValue = AppLocalizations.of(context)!.chinese;
                 }
-                
+
                 return DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: currentValue,
@@ -308,11 +294,14 @@ class _SettingsTabState extends State<SettingsTab> {
                     ],
                     onChanged: (value) {
                       if (value != null) {
-                        if (value == AppLocalizations.of(context)!.followSystem) {
+                        if (value ==
+                            AppLocalizations.of(context)!.followSystem) {
                           languageProvider.clearLanguage();
-                        } else if (value == AppLocalizations.of(context)!.english) {
+                        } else if (value ==
+                            AppLocalizations.of(context)!.english) {
                           languageProvider.setLanguage(const Locale('en'));
-                        } else if (value == AppLocalizations.of(context)!.chinese) {
+                        } else if (value ==
+                            AppLocalizations.of(context)!.chinese) {
                           languageProvider.setLanguage(const Locale('zh'));
                         }
                       }
@@ -360,10 +349,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -371,7 +357,7 @@ class _SettingsTabState extends State<SettingsTab> {
           Switch(
             value: value,
             onChanged: enabled ? onChanged : null,
-            activeColor: Theme.of(context).colorScheme.primary,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
           ),
         ],
       ),
@@ -394,11 +380,7 @@ class _SettingsTabState extends State<SettingsTab> {
         children: [
           Row(
             children: [
-              Icon(
-                icon,
-                color: Colors.grey[600],
-                size: 20,
-              ),
+              Icon(icon, color: Colors.grey[600], size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -414,10 +396,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ),
@@ -438,7 +417,9 @@ class _SettingsTabState extends State<SettingsTab> {
               activeTrackColor: Theme.of(context).colorScheme.primary,
               inactiveTrackColor: Colors.grey[300],
               thumbColor: Theme.of(context).colorScheme.primary,
-              overlayColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+              overlayColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.2),
             ),
             child: Slider(
               value: value,
@@ -458,28 +439,15 @@ class _SettingsTabState extends State<SettingsTab> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
         children: [
-          Icon(
-            icon,
-            color: Colors.grey[600],
-            size: 20,
-          ),
+          Icon(icon, color: Colors.grey[600], size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(value, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
         ],
       ),
     );
@@ -522,19 +490,12 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: Colors.grey[400],
-                size: 20,
-              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
             ],
           ),
         ),
@@ -547,9 +508,7 @@ class _SettingsTabState extends State<SettingsTab> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(AppLocalizations.of(context)!.privacyPolicy),
-        content: Text(
-          AppLocalizations.of(context)!.privacyPolicyContent,
-        ),
+        content: Text(AppLocalizations.of(context)!.privacyPolicyContent),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -570,6 +529,4 @@ class _SettingsTabState extends State<SettingsTab> {
       ),
     );
   }
-
-
 }

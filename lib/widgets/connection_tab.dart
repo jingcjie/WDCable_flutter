@@ -25,10 +25,7 @@ class ConnectionTab extends StatelessWidget {
           // Control Buttons
           _buildControlButtons(context),
           // Peers List
-          SizedBox(
-            height: 300,
-            child: _buildPeersList(context),
-          ),
+          SizedBox(height: 300, child: _buildPeersList(context)),
           // Logs Section
           _buildLogsSection(context),
         ],
@@ -42,11 +39,11 @@ class ConnectionTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: state.isWifiP2pEnabled
-            ? Colors.green.withOpacity(0.1)
-            : Colors.red.withOpacity(0.1),
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.red.withValues(alpha: 0.1),
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -65,9 +62,9 @@ class ConnectionTab extends StatelessWidget {
               children: [
                 Text(
                   AppLocalizations.of(context)!.wifiP2pDriver,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 Text(
                   state.isWifiP2pEnabled
@@ -112,9 +109,9 @@ class ConnectionTab extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             '${AppLocalizations.of(context)!.connectionStatus}: ${state.connectionInfo?.isConnected == true ? AppLocalizations.of(context)!.connected : AppLocalizations.of(context)!.disconnected}',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -130,7 +127,9 @@ class ConnectionTab extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: state.isDiscovering ? null : controller.discoverPeers,
+                  onPressed: state.isDiscovering
+                      ? null
+                      : controller.discoverPeers,
                   icon: state.isDiscovering
                       ? const SizedBox(
                           width: 16,
@@ -138,7 +137,11 @@ class ConnectionTab extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.search),
-                  label: Text(state.isDiscovering ? AppLocalizations.of(context)!.scanning : AppLocalizations.of(context)!.scanForDevices),
+                  label: Text(
+                    state.isDiscovering
+                        ? AppLocalizations.of(context)!.scanning
+                        : AppLocalizations.of(context)!.scanForDevices,
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -196,26 +199,16 @@ class ConnectionTab extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.devices_other,
-              size: 64,
-              color: Colors.grey,
-            ),
+            const Icon(Icons.devices_other, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
               AppLocalizations.of(context)!.noDevicesFound,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 8),
             Text(
               AppLocalizations.of(context)!.tapScanForDevices,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
@@ -226,7 +219,7 @@ class ConnectionTab extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -237,17 +230,19 @@ class ConnectionTab extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(8),
                 topRight: Radius.circular(8),
               ),
             ),
             child: Text(
-              AppLocalizations.of(context)!.availableDevices(state.peers.length),
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              AppLocalizations.of(
+                context,
+              )!.availableDevices(state.peers.length),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           Expanded(
@@ -255,7 +250,9 @@ class ConnectionTab extends StatelessWidget {
               itemCount: state.peers.length,
               separatorBuilder: (context, index) => Divider(
                 height: 1,
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
               ),
               itemBuilder: (context, index) {
                 final peer = state.peers[index];
@@ -277,10 +274,7 @@ class ConnectionTab extends StatelessWidget {
                     children: [
                       Text(
                         peer.deviceAddress,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 2),
                       Container(
@@ -289,7 +283,9 @@ class ConnectionTab extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: _getStatusColor(peer.status).withOpacity(0.2),
+                          color: _getStatusColor(
+                            peer.status,
+                          ).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -336,7 +332,7 @@ class ConnectionTab extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -347,7 +343,7 @@ class ConnectionTab extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(8),
                 topRight: Radius.circular(8),
@@ -359,9 +355,9 @@ class ConnectionTab extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   AppLocalizations.of(context)!.systemLogs,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),

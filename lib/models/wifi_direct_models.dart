@@ -1,4 +1,5 @@
 /// Data models for WiFi Direct functionality
+library;
 
 class WiFiDirectDevice {
   final String deviceName;
@@ -47,8 +48,7 @@ class WiFiDirectDevice {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is WiFiDirectDevice &&
-        other.deviceAddress == deviceAddress;
+    return other is WiFiDirectDevice && other.deviceAddress == deviceAddress;
   }
 
   @override
@@ -131,12 +131,7 @@ class ChatMessage {
   }
 }
 
-enum MessageType {
-  text,
-  file,
-  image,
-  system,
-}
+enum MessageType { text, file, image, system }
 
 class SpeedTestResult {
   final double downloadSpeed;

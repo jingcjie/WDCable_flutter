@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -45,10 +47,7 @@ class MyApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          supportedLocales: const [
-            Locale('en'),
-            Locale('zh'),
-          ],
+          supportedLocales: const [Locale('en'), Locale('zh')],
           home: const WiFiDirectHomePage(),
         );
       },
@@ -67,6 +66,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
     with TickerProviderStateMixin {
   late WiFiDirectController _controller;
   late TabController _tabController;
+  StreamSubscription<WiFiDirectState>? _stateSubscription;
   WiFiDirectState _state = WiFiDirectState();
 
   @override
@@ -79,7 +79,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
 
   void _initializeController() {
     // Listen to state changes from the controller
-    _controller.stateStream.listen((newState) {
+    _stateSubscription = _controller.stateStream.listen((newState) {
       if (mounted) {
         setState(() {
           _state = newState;
@@ -92,6 +92,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
 
   @override
   void dispose() {
+    _stateSubscription?.cancel();
     _tabController.dispose();
     _controller.dispose();
     super.dispose();
@@ -118,7 +119,9 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      color: Theme.of(
+                        context,
+                      ).shadowColor.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -127,15 +130,17 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: TabBar(
-                     controller: _tabController,
-                     indicator: BoxDecoration(
-                       color: Theme.of(context).colorScheme.primary,
-                       borderRadius: BorderRadius.circular(12),
-                     ),
-                     indicatorSize: TabBarIndicatorSize.tab,
-                     indicatorPadding: const EdgeInsets.all(2),
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicatorPadding: const EdgeInsets.all(2),
                     labelColor: Colors.white,
-                    unselectedLabelColor: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                    unselectedLabelColor: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
                     labelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -145,26 +150,14 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                       fontSize: 14,
                     ),
                     tabs: const [
-                      Tab(
-                        icon: Icon(Icons.wifi, size: 20),
-                        height: 60,
-                      ),
+                      Tab(icon: Icon(Icons.wifi, size: 20), height: 60),
                       Tab(
                         icon: Icon(Icons.chat_bubble_outline, size: 20),
                         height: 60,
                       ),
-                      Tab(
-                        icon: Icon(Icons.speed, size: 20),
-                        height: 60,
-                      ),
-                      Tab(
-                        icon: Icon(Icons.folder, size: 20),
-                        height: 60,
-                      ),
-                      Tab(
-                        icon: Icon(Icons.settings, size: 20),
-                        height: 60,
-                      ),
+                      Tab(icon: Icon(Icons.speed, size: 20), height: 60),
+                      Tab(icon: Icon(Icons.folder, size: 20), height: 60),
+                      Tab(icon: Icon(Icons.settings, size: 20), height: 60),
                     ],
                   ),
                 ),
@@ -176,26 +169,11 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      ConnectionTab(
-                        controller: _controller,
-                        state: _state,
-                      ),
-                      ChatTab(
-                        controller: _controller,
-                        state: _state,
-                      ),
-                      SpeedTestTab(
-                        controller: _controller,
-                        state: _state,
-                      ),
-                      FileTransferTab(
-                        controller: _controller,
-                        state: _state,
-                      ),
-                      SettingsTab(
-                        controller: _controller,
-                        state: _state,
-                      ),
+                      ConnectionTab(controller: _controller, state: _state),
+                      ChatTab(controller: _controller, state: _state),
+                      SpeedTestTab(controller: _controller, state: _state),
+                      FileTransferTab(controller: _controller, state: _state),
+                      SettingsTab(controller: _controller, state: _state),
                     ],
                   ),
                 ),
@@ -206,6 +184,4 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
       ),
     );
   }
-
-
 }
