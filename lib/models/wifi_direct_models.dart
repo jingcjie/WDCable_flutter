@@ -1,6 +1,12 @@
 /// Data models for WiFi Direct functionality
 library;
 
+class _Unset {
+  const _Unset();
+}
+
+const _unset = _Unset();
+
 class WiFiDirectDevice {
   final String deviceName;
   final String deviceAddress;
@@ -252,6 +258,8 @@ class FileTransferInfo {
 class WiFiDirectState {
   final bool isWifiP2pEnabled;
   final bool isDiscovering;
+  final bool isConnecting;
+  final String? pendingPeerAddress;
   final bool isServerStarted;
   final List<WiFiDirectDevice> peers;
   final WiFiDirectConnectionInfo? connectionInfo;
@@ -266,6 +274,8 @@ class WiFiDirectState {
   WiFiDirectState({
     this.isWifiP2pEnabled = false,
     this.isDiscovering = false,
+    this.isConnecting = false,
+    this.pendingPeerAddress,
     this.isServerStarted = false,
     this.peers = const [],
     this.connectionInfo,
@@ -281,29 +291,41 @@ class WiFiDirectState {
   WiFiDirectState copyWith({
     bool? isWifiP2pEnabled,
     bool? isDiscovering,
+    bool? isConnecting,
+    Object? pendingPeerAddress = _unset,
     bool? isServerStarted,
     List<WiFiDirectDevice>? peers,
-    WiFiDirectConnectionInfo? connectionInfo,
+    Object? connectionInfo = _unset,
     List<String>? logs,
     List<ChatMessage>? chatMessages,
-    SpeedTestResult? lastSpeedTest,
+    Object? lastSpeedTest = _unset,
     bool? isSpeedTesting,
     List<SpeedTestResult>? speedTestResults,
-    FileTransferInfo? currentFileTransfer,
+    Object? currentFileTransfer = _unset,
     List<FileTransferInfo>? recentFileTransfers,
   }) {
     return WiFiDirectState(
       isWifiP2pEnabled: isWifiP2pEnabled ?? this.isWifiP2pEnabled,
       isDiscovering: isDiscovering ?? this.isDiscovering,
+      isConnecting: isConnecting ?? this.isConnecting,
+      pendingPeerAddress: identical(pendingPeerAddress, _unset)
+          ? this.pendingPeerAddress
+          : pendingPeerAddress as String?,
       isServerStarted: isServerStarted ?? this.isServerStarted,
       peers: peers ?? this.peers,
-      connectionInfo: connectionInfo ?? this.connectionInfo,
+      connectionInfo: identical(connectionInfo, _unset)
+          ? this.connectionInfo
+          : connectionInfo as WiFiDirectConnectionInfo?,
       logs: logs ?? this.logs,
       chatMessages: chatMessages ?? this.chatMessages,
-      lastSpeedTest: lastSpeedTest ?? this.lastSpeedTest,
+      lastSpeedTest: identical(lastSpeedTest, _unset)
+          ? this.lastSpeedTest
+          : lastSpeedTest as SpeedTestResult?,
       isSpeedTesting: isSpeedTesting ?? this.isSpeedTesting,
       speedTestResults: speedTestResults ?? this.speedTestResults,
-      currentFileTransfer: currentFileTransfer ?? this.currentFileTransfer,
+      currentFileTransfer: identical(currentFileTransfer, _unset)
+          ? this.currentFileTransfer
+          : currentFileTransfer as FileTransferInfo?,
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
     );
   }

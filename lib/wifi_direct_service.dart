@@ -91,7 +91,10 @@ class ErrorEvent extends WiFiDirectEvent {
 
 class WiFiDirectResetEvent extends WiFiDirectEvent {}
 
-class PermissionDeniedEvent extends WiFiDirectEvent {}
+class PermissionDeniedEvent extends WiFiDirectEvent {
+  final List<String> missingCapabilities;
+  PermissionDeniedEvent([this.missingCapabilities = const []]);
+}
 
 class ClientConnectedEvent extends WiFiDirectEvent {
   final String message;
@@ -235,7 +238,17 @@ class WiFiDirectService {
           break;
           
         case 'onPermissionDenied':
-          _eventController.add(PermissionDeniedEvent());
+          if (call.arguments is Map) {
+            final Map<String, dynamic> permissionData = Map<String, dynamic>.from(call.arguments as Map);
+            final capabilities = permissionData['capabilities'];
+            _eventController.add(PermissionDeniedEvent(
+              capabilities is List
+                  ? capabilities.map((item) => item.toString()).toList()
+                  : const [],
+            ));
+          } else {
+            _eventController.add(PermissionDeniedEvent());
+          }
           break;
           
         case 'onClientConnected':

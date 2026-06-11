@@ -27,39 +27,21 @@ class PermissionManager(
             }
         }
         
-        // Add storage permissions
-        addStoragePermissions(permissions)
-        
         if (permissions.isNotEmpty()) {
             ActivityCompat.requestPermissions(activity, permissions.toTypedArray(), REQUEST_PERMISSIONS)
         }
     }
     
-    private fun addStoragePermissions(permissions: MutableList<String>) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ - Check granular media permissions
-            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
-            }
-            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
-            }
-            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-            }
-        } else {
-            // Android 12 and below - Check READ_EXTERNAL_STORAGE
-            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
-    }
-    
     fun handlePermissionResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         if (requestCode == REQUEST_PERMISSIONS) {
-            val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            if (!allGranted) {
-                methodChannel.invokeMethod("onPermissionDenied", null)
+            val deniedPermissions = permissions.filterIndexed { index, _ ->
+                index >= grantResults.size || grantResults[index] != PackageManager.PERMISSION_GRANTED
+            }
+            if (deniedPermissions.isNotEmpty()) {
+                methodChannel.invokeMethod("onPermissionDenied", mapOf(
+                    "permissions" to deniedPermissions,
+                    "capabilities" to deniedPermissions.map { permissionToCapability(it) }
+                ))
             }
         }
     }
@@ -75,24 +57,12 @@ class PermissionManager(
             true // Not required on older versions
         }
     }
-    
-    fun hasStoragePermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ - Check if at least one media permission is granted
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-        } else {
-            // Android 12 and below - Check READ_EXTERNAL_STORAGE
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-    
-    fun requestStoragePermissions() {
-        val permissions = mutableListOf<String>()
-        addStoragePermissions(permissions)
-        if (permissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(activity, permissions.toTypedArray(), REQUEST_PERMISSIONS)
+
+    private fun permissionToCapability(permission: String): String {
+        return when (permission) {
+            Manifest.permission.ACCESS_FINE_LOCATION -> "Location"
+            Manifest.permission.NEARBY_WIFI_DEVICES -> "Nearby Wi-Fi devices"
+            else -> permission
         }
     }
 }

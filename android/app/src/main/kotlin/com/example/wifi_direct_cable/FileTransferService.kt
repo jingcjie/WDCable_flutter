@@ -18,7 +18,6 @@ class FileTransferService(
     private val socketManager: SocketConnectionManager,
     private val methodChannel: MethodChannel
 ) {
-    private var permissionManager: PermissionManager? = null
     private val executor = Executors.newCachedThreadPool()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val REQUEST_FILE_PICKER = 1002
@@ -26,20 +25,8 @@ class FileTransferService(
     // File picker result callback
     private var filePickerResult: MethodChannel.Result? = null
     
-    fun setPermissionManager(permissionManager: PermissionManager) {
-        this.permissionManager = permissionManager
-    }
-    
     fun pickFile(result: MethodChannel.Result) {
         methodChannel.invokeMethod("onDebug", "FileTransfer: Starting file picker")
-        
-        // Check storage permissions before launching file picker
-        if (permissionManager?.hasStoragePermission() != true) {
-            methodChannel.invokeMethod("onDebug", "FileTransfer: Storage permission not granted, requesting permissions")
-            permissionManager?.requestStoragePermissions()
-            result.error("PERMISSION_DENIED", "Storage permission required to access files", null)
-            return
-        }
         
         filePickerResult = result
         val intent = Intent(Intent.ACTION_GET_CONTENT)

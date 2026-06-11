@@ -6,11 +6,14 @@ import '../utils/app_logger.dart';
 
 /// Controller that manages WiFi Direct state and business logic
 class WiFiDirectController {
+  static const int _maxLogCount = 200;
+
   final WiFiDirectService _service;
   late final StreamController<WiFiDirectState> _stateController;
   late final StreamSubscription _eventSubscription;
 
   WiFiDirectState _currentState = WiFiDirectState();
+  int _sessionRevision = 0;
 
   /// Stream of state changes
   Stream<WiFiDirectState> get stateStream => _stateController.stream;
@@ -33,6 +36,25 @@ class WiFiDirectController {
     });
   }
 
+  WiFiDirectState _stateWithClearedSession() {
+    return _currentState.copyWith(
+      isDiscovering: false,
+      isConnecting: false,
+      pendingPeerAddress: null,
+      isServerStarted: false,
+      peers: const [],
+      connectionInfo: null,
+      lastSpeedTest: null,
+      isSpeedTesting: false,
+      currentFileTransfer: null,
+    );
+  }
+
+  void _clearSessionState() {
+    _sessionRevision++;
+    _updateState(_stateWithClearedSession());
+  }
+
   void _handleEvent(WiFiDirectEvent event) {
     switch (event) {
       case PeersChangedEvent peersEvent:
@@ -51,12 +73,14 @@ class WiFiDirectController {
         break;
 
       case ConnectionChangedEvent connectionEvent:
-        _updateState(
-          _currentState.copyWith(
-            connectionInfo: connectionEvent.connectionInfo,
-          ),
-        );
         if (connectionEvent.connectionInfo.isConnected) {
+          _updateState(
+            _currentState.copyWith(
+              connectionInfo: connectionEvent.connectionInfo,
+              isConnecting: false,
+              pendingPeerAddress: null,
+            ),
+          );
           final connectionStatus =
               'Connected as ${connectionEvent.connectionInfo.isGroupOwner ? "Group Owner" : "Client"}';
           _addLog(connectionStatus);
@@ -70,7 +94,7 @@ class WiFiDirectController {
         } else {
           _addLog('Disconnected');
           AppLogger.info('[ANDROID CONNECTION] Disconnected');
-          _updateState(_currentState.copyWith(isServerStarted: false));
+          _clearSessionState();
         }
         break;
 
@@ -114,6 +138,14 @@ class WiFiDirectController {
         final errorMessage = 'Error: ${errorEvent.error}';
         _addLog(errorMessage);
         AppLogger.error('[ANDROID ERROR] ${errorEvent.error}');
+        if (errorEvent.error.contains('Connection failed')) {
+          _updateState(
+            _currentState.copyWith(
+              isConnecting: false,
+              pendingPeerAddress: null,
+            ),
+          );
+        }
         break;
 
       case DebugEvent debugEvent:
@@ -123,18 +155,18 @@ class WiFiDirectController {
         break;
 
       case WiFiDirectResetEvent _:
-        _updateState(
-          _currentState.copyWith(
-            peers: [],
-            connectionInfo: null,
-            isServerStarted: false,
-          ),
-        );
+        _clearSessionState();
         _addLog('WiFi Direct settings have been reset');
         break;
 
-      case PermissionDeniedEvent _:
-        _addLog('Permission denied. Please grant location permission.');
+      case PermissionDeniedEvent permissionEvent:
+        final missingCapabilities = permissionEvent.missingCapabilities.isEmpty
+            ? 'required Wi-Fi Direct permissions'
+            : permissionEvent.missingCapabilities.join(', ');
+        _updateState(_currentState.copyWith(isWifiP2pEnabled: false));
+        _addLog(
+          'Permission denied: $missingCapabilities. Grant permissions in Android Settings and retry.',
+        );
         break;
 
       case ClientConnectedEvent clientEvent:
@@ -284,7 +316,10 @@ class WiFiDirectController {
     final timestamp = DateTime.now().toString().substring(11, 19);
     final logEntry = '$timestamp: $message';
     final updatedLogs = List<String>.from(_currentState.logs)..add(logEntry);
-    _updateState(_currentState.copyWith(logs: updatedLogs));
+    final boundedLogs = updatedLogs.length > _maxLogCount
+        ? updatedLogs.sublist(updatedLogs.length - _maxLogCount)
+        : updatedLogs;
+    _updateState(_currentState.copyWith(logs: boundedLogs));
   }
 
   void _addChatMessage(String content, bool isSent, [int? receivedTimestamp]) {
@@ -327,10 +362,39 @@ class WiFiDirectController {
   }
 
   Future<void> connectToPeer(WiFiDirectDevice device) async {
+    if (_currentState.connectionInfo?.isConnected == true ||
+        device.status == 0) {
+      _addLog('Already connected to ${device.deviceName}');
+      return;
+    }
+
+    final isSamePendingPeer =
+        _currentState.pendingPeerAddress == device.deviceAddress;
+    if (_currentState.isConnecting || device.status == 1) {
+      if (isSamePendingPeer || device.status == 1) {
+        _addLog('Connection already pending for ${device.deviceName}');
+      } else {
+        _addLog(
+          'Connection already pending for another peer. Ignoring ${device.deviceName}.',
+        );
+      }
+      return;
+    }
+
+    _updateState(
+      _currentState.copyWith(
+        isConnecting: true,
+        pendingPeerAddress: device.deviceAddress,
+      ),
+    );
+
     try {
       final result = await _service.connectToPeer(device.deviceAddress);
       _addLog('Connecting to ${device.deviceName}: $result');
     } catch (e) {
+      _updateState(
+        _currentState.copyWith(isConnecting: false, pendingPeerAddress: null),
+      );
       _addLog('Connection failed: $e');
     }
   }
@@ -339,7 +403,7 @@ class WiFiDirectController {
     try {
       final result = await _service.disconnect();
       _addLog('Disconnected: $result');
-      _updateState(_currentState.copyWith(isServerStarted: false));
+      _clearSessionState();
     } catch (e) {
       _addLog('Disconnect failed: $e');
     }
@@ -410,6 +474,7 @@ class WiFiDirectController {
     try {
       final result = await _service.resetWifiDirectSettings();
       _addLog(result);
+      _clearSessionState();
     } catch (e) {
       _addLog('Failed to reset WiFi Direct settings: $e');
     }
@@ -417,11 +482,17 @@ class WiFiDirectController {
 
   // Speed test methods
   Future<void> startSpeedTest(int testDataSizeMB) async {
+    if (_currentState.isSpeedTesting) {
+      _addLog('Speed test already in progress');
+      return;
+    }
+
     if (_currentState.connectionInfo?.isConnected != true) {
       _addLog('Speed test cancelled: not connected to peer');
       return;
     }
 
+    final speedTestSessionRevision = _sessionRevision;
     _updateState(_currentState.copyWith(isSpeedTesting: true));
     _addLog(
       'Starting comprehensive speed test with ${testDataSizeMB}MB data size...',
@@ -465,6 +536,11 @@ class WiFiDirectController {
         status: 'Completed',
       );
 
+      if (speedTestSessionRevision != _sessionRevision) {
+        _addLog('Speed test result ignored after disconnect/reset');
+        return;
+      }
+
       // Add to results list and update state
       final updatedResults = List<SpeedTestResult>.from(
         _currentState.speedTestResults,
@@ -504,6 +580,11 @@ class WiFiDirectController {
         timestamp: DateTime.now(),
         status: errorStatus,
       );
+      if (speedTestSessionRevision != _sessionRevision) {
+        _addLog('Speed test failure ignored after disconnect/reset');
+        return;
+      }
+
       final updatedResults = List<SpeedTestResult>.from(
         _currentState.speedTestResults,
       )..add(failedResult);
@@ -519,7 +600,9 @@ class WiFiDirectController {
       } catch (e) {
         _addLog('Warning: Failed to reset speed testing mode: $e');
       }
-      _updateState(_currentState.copyWith(isSpeedTesting: false));
+      if (speedTestSessionRevision == _sessionRevision) {
+        _updateState(_currentState.copyWith(isSpeedTesting: false));
+      }
       _addLog('Speed test session ended.');
     }
   }

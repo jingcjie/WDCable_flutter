@@ -85,6 +85,13 @@ class ConnectionTab extends StatelessWidget {
   }
 
   Widget _buildConnectionStatus(BuildContext context) {
+    final isConnected = state.connectionInfo?.isConnected == true;
+    final statusText = isConnected
+        ? AppLocalizations.of(context)!.connected
+        : state.isConnecting
+        ? 'Connecting...'
+        : AppLocalizations.of(context)!.disconnected;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -99,19 +106,17 @@ class ConnectionTab extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            state.connectionInfo?.isConnected == true
-                ? Icons.link
-                : Icons.link_off,
-            color: state.connectionInfo?.isConnected == true
-                ? Colors.green
-                : Colors.red,
+            isConnected ? Icons.link : Icons.link_off,
+            color: isConnected ? Colors.green : Colors.red,
           ),
           const SizedBox(width: 8),
-          Text(
-            '${AppLocalizations.of(context)!.connectionStatus}: ${state.connectionInfo?.isConnected == true ? AppLocalizations.of(context)!.connected : AppLocalizations.of(context)!.disconnected}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text(
+              '${AppLocalizations.of(context)!.connectionStatus}: $statusText',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -256,6 +261,7 @@ class ConnectionTab extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 final peer = state.peers[index];
+                final action = _getPeerAction(context, peer);
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: _getStatusColor(peer.status),
@@ -300,7 +306,9 @@ class ConnectionTab extends StatelessWidget {
                     ],
                   ),
                   trailing: ElevatedButton(
-                    onPressed: () => controller.connectToPeer(peer),
+                    onPressed: action.enabled
+                        ? () => controller.connectToPeer(peer)
+                        : null,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -309,8 +317,8 @@ class ConnectionTab extends StatelessWidget {
                       minimumSize: Size.zero,
                     ),
                     child: Text(
-                      AppLocalizations.of(context)!.connect,
-                      style: TextStyle(fontSize: 12),
+                      action.label,
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
@@ -324,6 +332,31 @@ class ConnectionTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  _PeerAction _getPeerAction(BuildContext context, WiFiDirectDevice peer) {
+    final isPendingPeer =
+        state.isConnecting && state.pendingPeerAddress == peer.deviceAddress;
+    final isConnectedPeer = peer.status == 0;
+    final isInvitedPeer = peer.status == 1;
+
+    if (isConnectedPeer) {
+      return _PeerAction(AppLocalizations.of(context)!.connected, false);
+    }
+
+    if (isPendingPeer) {
+      return const _PeerAction('Connecting...', false);
+    }
+
+    if (isInvitedPeer) {
+      return const _PeerAction('Invited', false);
+    }
+
+    if (state.isConnecting || state.connectionInfo?.isConnected == true) {
+      return _PeerAction(AppLocalizations.of(context)!.connect, false);
+    }
+
+    return _PeerAction(AppLocalizations.of(context)!.connect, true);
   }
 
   Widget _buildLogsSection(BuildContext context) {
@@ -402,4 +435,11 @@ class ConnectionTab extends StatelessWidget {
         return Colors.grey;
     }
   }
+}
+
+class _PeerAction {
+  final String label;
+  final bool enabled;
+
+  const _PeerAction(this.label, this.enabled);
 }

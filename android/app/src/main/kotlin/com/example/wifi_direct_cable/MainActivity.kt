@@ -1,10 +1,12 @@
 package com.example.wifi_direct_cable
 
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pDeviceList
 import android.net.wifi.p2p.WifiP2pManager
+import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,6 +25,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     private lateinit var methodChannelHandler: FlutterMethodChannelHandler
     
     private var receiver: WiFiDirectBroadcastReceiver? = null
+    private var isReceiverRegistered = false
     private val intentFilter = IntentFilter()
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,9 +54,6 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         speedTestService = socketManager.getSpeedTestService()
         fileTransferService = socketManager.getFileTransferService()
         
-        // Set permission manager reference in file transfer service
-        fileTransferService.setPermissionManager(permissionManager)
-        
         methodChannelHandler = FlutterMethodChannelHandler(
             this,
             methodChannel,
@@ -74,26 +74,54 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     // Lifecycle methods
     override fun onResume() {
         super.onResume()
-        receiver = WiFiDirectBroadcastReceiver(
+        registerWifiDirectReceiver()
+    }
+
+    override fun onPause() {
+        unregisterWifiDirectReceiver()
+        super.onPause()
+    }
+
+    private fun registerWifiDirectReceiver() {
+        if (!::wifiDirectManager.isInitialized || isReceiverRegistered) return
+
+        val activeReceiver = receiver ?: WiFiDirectBroadcastReceiver(
             wifiDirectManager.wifiP2pManager,
             wifiDirectManager.channel,
             wifiDirectManager
-        )
-        registerReceiver(receiver, intentFilter)
+        ).also { receiver = it }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(activeReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(activeReceiver, intentFilter)
+        }
+        isReceiverRegistered = true
     }
-    
-    override fun onPause() {
-        super.onPause()
-        unregisterReceiver(receiver)
+
+    private fun unregisterWifiDirectReceiver() {
+        if (!isReceiverRegistered) return
+
+        try {
+            receiver?.let { unregisterReceiver(it) }
+        } catch (e: IllegalArgumentException) {
+            if (::methodChannel.isInitialized) {
+                methodChannel.invokeMethod("onDebug", "WiFi Direct receiver was already unregistered")
+            }
+        } finally {
+            isReceiverRegistered = false
+        }
     }
-    
+
     override fun onDestroy() {
-        val channel = wifiDirectManager.channel
-        if (channel != null) {
-            channel.close()
+        unregisterWifiDirectReceiver()
+        if (::socketManager.isInitialized) {
+            socketManager.cleanup()
+        }
+        if (::wifiDirectManager.isInitialized) {
+            wifiDirectManager.channel?.close()
         }
         super.onDestroy()
-        socketManager.cleanup()
     }
     
     // Handle activity results

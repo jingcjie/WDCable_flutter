@@ -61,22 +61,6 @@ Closure notes:
 - User reported Android manual test OK.
 - Repeated Connect while a peer is already invited logs a caught Android platform failure; long-term UI/state guard is tracked under F-02.
 
-User test after Codex finishes:
-
-- [ ] Install on one Android phone.
-- [ ] Open the app 5 times.
-- [ ] Switch across all 5 tabs at least 20 times.
-- [ ] Background and resume the app 5 times.
-- [ ] Rotate the phone if rotation is enabled.
-- [ ] Open Settings and change theme and language once.
-
-Report back:
-
-- App launch success rate out of 5.
-- Whether tab switching caused any crash, blank screen, or stuck UI.
-- Whether background/resume changed connection status incorrectly.
-- Any visible analyzer/build caveat Codex told you remains.
-
 ## F-02 - State Model Fixes
 
 Goal: make Flutter state transitions reliable and clear stale state correctly.

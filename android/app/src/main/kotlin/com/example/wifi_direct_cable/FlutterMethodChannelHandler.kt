@@ -3,6 +3,7 @@ package com.example.wifi_direct_cable
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -159,17 +160,40 @@ class FlutterMethodChannelHandler(
     
     private fun getDeviceSettings(result: MethodChannel.Result) {
         val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val stats = socketManager.getConnectionStats()
+        val isConnected = stats["isConnected"] as? Boolean ?: false
         val settings = mapOf(
             "wifiEnabled" to wifiManager.isWifiEnabled,
+            "wifiDirectSupported" to context.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT),
+            "wifiP2pEnabled" to isWifiDirectReady(),
             "deviceName" to Build.MODEL,
-            "deviceAddress" to "Unknown" // P2P device address is not easily accessible
+            "deviceAddress" to "Unavailable",
+            "isGroupOwner" to (stats["isGroupOwner"] as? Boolean ?: false),
+            "chatServerRunning" to (stats["isChatServerRunning"] as? Boolean ?: false),
+            "speedTestServerRunning" to (stats["isSpeedTestServerRunning"] as? Boolean ?: false),
+            "fileTransferServerRunning" to (stats["isFileTransferServerRunning"] as? Boolean ?: false),
+            "discoveredDevicesCount" to wifiDirectManager.discoveredDevicesCount,
+            "connectedClientsCount" to if (isConnected) 1 else 0,
+            "locationPermissionGranted" to permissionManager.hasLocationPermission(),
+            "nearbyWifiDevicesPermissionGranted" to permissionManager.hasNearbyWifiDevicesPermission(),
+            "storageAccessMode" to "system_picker",
+            "timestamp" to System.currentTimeMillis()
         )
         result.success(settings)
     }
     
     private fun isWifiP2pEnabled(result: MethodChannel.Result) {
+        result.success(isWifiDirectReady())
+    }
+
+    private fun isWifiDirectReady(): Boolean {
         val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        result.success(wifiManager.isWifiEnabled)
+        val wifiDirectSupported = context.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)
+        return wifiManager.isWifiEnabled &&
+            wifiDirectSupported &&
+            permissionManager.hasLocationPermission() &&
+            permissionManager.hasNearbyWifiDevicesPermission() &&
+            wifiDirectManager.channel != null
     }
     
     private fun getDiscoveryStatus(result: MethodChannel.Result) {
@@ -183,13 +207,6 @@ class FlutterMethodChannelHandler(
     private fun openFile(filePath: String?, result: MethodChannel.Result) {
         if (filePath == null) {
             result.error("INVALID_PATH", "File path cannot be null", null)
-            return
-        }
-        
-        // Check storage permissions before opening file
-        if (!permissionManager.hasStoragePermission()) {
-            permissionManager.requestStoragePermissions()
-            result.error("PERMISSION_DENIED", "Storage permission required to open files", null)
             return
         }
         

@@ -78,6 +78,9 @@ class _SpeedTestTabState extends State<SpeedTestTab>
       _eventSubscription?.cancel();
       _setupProgressListener();
     }
+    if (oldWidget.state.isSpeedTesting && !widget.state.isSpeedTesting) {
+      _resetRunningTestUi();
+    }
   }
 
   @override
@@ -190,7 +193,9 @@ class _SpeedTestTabState extends State<SpeedTestTab>
   }
 
   void _startSpeedTest() async {
-    if (!_isTestRunning && widget.state.connectionInfo?.isConnected == true) {
+    if (!_isTestRunning &&
+        !widget.state.isSpeedTesting &&
+        widget.state.connectionInfo?.isConnected == true) {
       setState(() {
         _isTestRunning = true;
         _downloadProgress = 0.0;
@@ -212,6 +217,21 @@ class _SpeedTestTabState extends State<SpeedTestTab>
       _animationController.stop();
       _animationController.reset();
     }
+  }
+
+  void _resetRunningTestUi() {
+    if (!mounted || !_isTestRunning) return;
+
+    setState(() {
+      _isTestRunning = false;
+      _downloadProgress = 0.0;
+      _uploadProgress = 0.0;
+      _currentDownloadSpeed = 0.0;
+      _currentUploadSpeed = 0.0;
+      _currentTestPhase = '';
+    });
+    _animationController.stop();
+    _animationController.reset();
   }
 
   @override
@@ -292,6 +312,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
 
   Widget _buildSpeedTestControls(BuildContext context) {
     final isConnected = widget.state.connectionInfo?.isConnected == true;
+    final isTestRunning = _isTestRunning || widget.state.isSpeedTesting;
 
     return Card(
       elevation: 2,
@@ -317,7 +338,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                         Theme.of(context).colorScheme.primary,
                       ],
                     ),
-                    boxShadow: _isTestRunning
+                    boxShadow: isTestRunning
                         ? [
                             BoxShadow(
                               color: Theme.of(context).colorScheme.primary
@@ -332,7 +353,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(60),
-                      onTap: isConnected && !_isTestRunning
+                      onTap: isConnected && !isTestRunning
                           ? _startSpeedTest
                           : null,
                       child: Center(
@@ -340,7 +361,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              _isTestRunning
+                              isTestRunning
                                   ? Icons.hourglass_empty
                                   : Icons.speed,
                               color: Colors.white,
@@ -348,7 +369,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              _isTestRunning
+                              isTestRunning
                                   ? AppLocalizations.of(context)!.testing
                                   : AppLocalizations.of(context)!.start,
                               style: const TextStyle(
@@ -367,7 +388,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
             ),
             const SizedBox(height: 16),
             Text(
-              _isTestRunning
+              isTestRunning
                   ? _currentTestPhase
                   : isConnected
                   ? AppLocalizations.of(context)!.tapToStartSpeedTest
@@ -380,7 +401,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
             ),
 
             // Progress indicators when test is running
-            if (_isTestRunning) ...[
+            if (isTestRunning) ...[
               const SizedBox(height: 20),
               _buildProgressIndicators(context),
             ],

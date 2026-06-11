@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.p2p.*
 import android.net.wifi.WpsInfo
+import android.os.Build
 import androidx.core.app.ActivityCompat
 import io.flutter.plugin.common.MethodChannel
 
@@ -14,6 +15,9 @@ class WiFiDirectManager(
 ) {
     lateinit var wifiP2pManager: WifiP2pManager
     var channel: WifiP2pManager.Channel? = null
+    private var latestPeersCount = 0
+    val discoveredDevicesCount: Int
+        get() = latestPeersCount
     
     interface ConnectionListener {
         fun onConnectionInfoAvailable(info: WifiP2pInfo)
@@ -27,24 +31,37 @@ class WiFiDirectManager(
         this.connectionListener = connectionListener
         wifiP2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager
         channel = wifiP2pManager.initialize(context, context.mainLooper, null)
-        // Reset any existing WiFi Direct connections and settings
-        resetWifiDirectSettings(object : MethodChannel.Result {
-            override fun success(result: Any?) {
-                methodChannel.invokeMethod("onDebug", "WiFi Direct settings reset during initialization")
-            }
-            override fun error(code: String, message: String?, details: Any?) {
-                methodChannel.invokeMethod("onError", "Failed to reset WiFi Direct settings: $message")
-            }
-            override fun notImplemented() {}
-        })
-        
+        methodChannel.invokeMethod("onDebug", "WiFi Direct manager initialized")
     }
     
     fun getManager(): WifiP2pManager = wifiP2pManager
+
+    fun missingWifiDirectCapabilities(): List<String> {
+        val missingCapabilities = mutableListOf<String>()
+
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            missingCapabilities.add("Location")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+            missingCapabilities.add("Nearby Wi-Fi devices")
+        }
+
+        return missingCapabilities
+    }
+
+    fun notifyPermissionDenied(capabilities: List<String>) {
+        methodChannel.invokeMethod("onPermissionDenied", mapOf(
+            "capabilities" to capabilities
+        ))
+    }
     
     fun discoverPeers(result: MethodChannel.Result) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            result.error("PERMISSION_DENIED", "Location permission required", null)
+        val missingCapabilities = missingWifiDirectCapabilities()
+        if (missingCapabilities.isNotEmpty()) {
+            notifyPermissionDenied(missingCapabilities)
+            result.error("PERMISSION_DENIED", "${missingCapabilities.joinToString(", ")} permission required", null)
             return
         }
         
@@ -68,8 +85,10 @@ class WiFiDirectManager(
             return
         }
         
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            result.error("PERMISSION_DENIED", "Location permission required", null)
+        val missingCapabilities = missingWifiDirectCapabilities()
+        if (missingCapabilities.isNotEmpty()) {
+            notifyPermissionDenied(missingCapabilities)
+            result.error("PERMISSION_DENIED", "${missingCapabilities.joinToString(", ")} permission required", null)
             return
         }
         
@@ -140,6 +159,7 @@ class WiFiDirectManager(
     
     // Called from broadcast receiver
     fun handlePeersAvailable(peers: WifiP2pDeviceList) {
+        latestPeersCount = peers.deviceList.size
         connectionListener?.onPeersAvailable(peers)
     }
     

@@ -1,12 +1,9 @@
 package com.example.wifi_direct_cable
 
-import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pManager
-import androidx.core.app.ActivityCompat
 
 class WiFiDirectBroadcastReceiver(
     private val manager: WifiP2pManager,
@@ -23,18 +20,24 @@ class WiFiDirectBroadcastReceiver(
             }
             
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
-                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                val missingCapabilities = wifiDirectManager.missingWifiDirectCapabilities()
+                if (missingCapabilities.isEmpty()) {
                     manager.requestPeers(channel) { peers ->
                         wifiDirectManager.handlePeersAvailable(peers)
                     }
+                } else {
+                    wifiDirectManager.notifyPermissionDenied(missingCapabilities)
                 }
             }
             
             WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
-                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                val missingCapabilities = wifiDirectManager.missingWifiDirectCapabilities()
+                if (missingCapabilities.isEmpty()) {
                     manager.requestConnectionInfo(channel) { info ->
                         wifiDirectManager.handleConnectionInfoAvailable(info)
                     }
+                } else {
+                    wifiDirectManager.notifyPermissionDenied(missingCapabilities)
                 }
             }
             
