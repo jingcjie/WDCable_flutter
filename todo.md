@@ -14,21 +14,26 @@ The Wi-Fi Direct layer is already well tested and should be kept unless a specif
 - `WiFiDirectManager.kt` handles Android Wi-Fi P2P discovery/connect/disconnect.
 - `WiFiDirectBroadcastReceiver.kt` forwards Android P2P broadcasts.
 
-The part to replace is everything after Wi-Fi Direct creates the network link:
+The legacy part that was replaced is everything after Wi-Fi Direct creates the network link:
 
-- `SocketConnectionManager.kt` owns three raw TCP channels.
+- `SocketConnectionManager.kt` owned three raw TCP channels and has been removed from the live path.
 - Chat uses port `8888`.
 - Speed test uses port `8889`.
 - File transfer uses port `8890`.
-- `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt` parse and write ad hoc string headers directly on sockets.
+- `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt` used to parse and write ad hoc string headers directly on sockets.
 
-That raw socket feature design is the source of fragility and future upgrade cost. The rewrite should replace it directly. Do not support the previous wire protocol and do not keep duplicate feature paths.
+That raw socket feature design was the source of fragility and future upgrade cost. The upgraded Android path now uses the session runtime. Do not support the previous wire protocol and do not restore duplicate feature socket paths.
 
 ## Completed / Historical Work
 
 - F-01 analyzer cleanup was completed. `flutter analyze` was clean at that point.
 - F-02 state cleanup appears partly or mostly implemented in current code. Verify before relying on it.
 - F-03 Android permission/lifecycle hardening is considered implemented, but manual testing was not good enough. Treat it as useful cleanup, not proof that the current socket transport is stable.
+- F-A through F-D are implemented on Android: framed protocol, session runtime, control-channel chat, bulk file transfer, and bulk speed test.
+- Android diagnostics/export work from F-F is implemented enough for Android-to-Android validation.
+- Android-to-Android full flow has been manually tested and is generally good. Minor bugs remain for follow-up tuning.
+- Android-to-Windows has not been manually tested yet.
+- Streaming is dropped from this phase. Do not implement audio/video/screen streaming, microphone capture, playback, jitter buffers, or streaming UI. Existing `realtime` scaffolding is reserved/no-op compatibility only until the protocol is cleaned up.
 
 ## Target Architecture
 
@@ -38,20 +43,19 @@ After Wi-Fi Direct reports an IP link:
 2. Feature services do not read or write sockets directly.
 3. The session manager performs protocol handshake, heartbeat, channel setup, teardown, and error reporting.
 4. Flutter reaches `Ready` only after the upgraded app protocol is negotiated.
-5. Chat, file transfer, speed test, diagnostics, and streaming all use the session API.
+5. Chat, file transfer, speed test, and diagnostics all use the session API.
 
 Target channels:
 
-- `control`: reliable small messages such as handshake, heartbeat, close, error, chat, command, ack, and stream start/stop.
+- `control`: reliable small messages such as handshake, heartbeat, close, error, chat, command, ack, and feature control messages.
 - `bulk`: reliable large ordered payloads such as file transfer, speed-test payloads, and diagnostics export.
-- `realtime`: low-latency streaming path. Audio streaming is the first streaming milestone. Keep this separate from `bulk` so file transfer does not block audio.
+- `realtime`: reserved/no-op only if needed for compatibility with current protocol scaffolding. Do not send feature traffic on it in this phase.
 
-Streaming MVP:
+Streaming scope:
 
-- Bidirectional audio streaming over Wi-Fi Direct.
-- Start with PCM16 mono audio if that is the fastest stable cross-platform path.
-- Add Opus or another codec only after Android and Windows dependency choices are explicit.
-- Do not start video or screen streaming until audio is stable.
+- No streaming implementation work is scheduled.
+- Do not add microphone capture, audio playback, codecs, sender pacing, jitter buffers, or streaming controls.
+- A no-op `realtime` transport is allowed only if required for compatibility with existing Android protocol scaffolding.
 
 ## Important Source Map
 
@@ -68,10 +72,12 @@ Android/Kotlin:
 - `android/app/src/main/kotlin/com/example/wifi_direct_cable/MainActivity.kt`: service wiring and Wi-Fi Direct callbacks.
 - `android/app/src/main/kotlin/com/example/wifi_direct_cable/FlutterMethodChannelHandler.kt`: MethodChannel commands.
 - `android/app/src/main/kotlin/com/example/wifi_direct_cable/WiFiDirectManager.kt`: Android Wi-Fi P2P operations.
-- `android/app/src/main/kotlin/com/example/wifi_direct_cable/SocketConnectionManager.kt`: current raw socket owner. Replace it with the session runtime.
-- `android/app/src/main/kotlin/com/example/wifi_direct_cable/ChatService.kt`: current chat protocol. Replace its socket path.
-- `android/app/src/main/kotlin/com/example/wifi_direct_cable/SpeedTestService.kt`: current speed protocol. Replace its socket path.
-- `android/app/src/main/kotlin/com/example/wifi_direct_cable/FileTransferService.kt`: current file protocol. Replace its socket path.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/session/SessionManager.kt`: current app transport/session owner.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/protocol/`: Android frame codec and protocol constants.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/diagnostics/DiagnosticsLogger.kt`: Android diagnostic ring buffer/export source.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/ChatService.kt`: calls the session API for control-channel chat.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/SpeedTestService.kt`: calls the session API for bulk speed tests.
+- `android/app/src/main/kotlin/com/example/wifi_direct_cable/FileTransferService.kt`: calls the session API for bulk file transfer.
 - `android/app/src/main/AndroidManifest.xml`: permissions and app declarations.
 
 ## Agent Workflow Rules
@@ -84,6 +90,7 @@ Android/Kotlin:
 - If `../PROTOCOL.md` exists, follow it. If it does not exist and F-A is the current task, create it.
 - Do not add feature-level socket reads/writes. All app features should call the session API.
 - Do not support previous builds at the protocol layer. When a feature is migrated, delete or disconnect its old socket path.
+- Do not implement streaming features in Android. Any `realtime` channel work is no-op compatibility only unless a later product decision explicitly reopens streaming.
 
 ## Standard Verification Commands
 
@@ -129,9 +136,9 @@ No manual device test required.
 
 Codex work:
 
-- [ ] Read the current protocol in `SocketConnectionManager.kt`, `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt`.
-- [ ] Create or update shared `../PROTOCOL.md` if missing.
-- [ ] Define Android constants matching the shared spec:
+- [x] Read the current protocol in `SocketConnectionManager.kt`, `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt`.
+- [x] Create or update shared `../PROTOCOL.md` if missing.
+- [x] Define Android constants matching the shared spec:
   - magic
   - protocol version
   - frame header size
@@ -140,13 +147,13 @@ Codex work:
   - channel names
   - frame type names/ids
   - capability strings
-- [ ] Add Kotlin protocol classes in a focused package or files, for example:
+- [x] Add Kotlin protocol classes in a focused package or files, for example:
   - `ProtocolFrame`
   - `ProtocolFrameType`
   - `ProtocolChannel`
   - `ProtocolError`
   - `ProtocolCodec`
-- [ ] Implement binary frame encode/decode:
+- [x] Implement binary frame encode/decode:
   - fixed magic/version
   - frame type
   - flags
@@ -157,12 +164,12 @@ Codex work:
   - payload length
   - UTF-8 JSON metadata
   - payload bytes
-- [ ] Enforce maximum metadata and payload sizes.
-- [ ] Reject malformed magic/version and invalid lengths with typed protocol errors.
-- [ ] Add tests for valid frames, partial reads, malformed headers, oversized metadata, oversized payload, zero-length payload, and JSON metadata round trip.
-- [ ] Do not wire new code into live feature flows yet unless the touched feature is fully replaced in the same milestone.
-- [ ] Run `flutter analyze`.
-- [ ] Run protocol tests if available.
+- [x] Enforce maximum metadata and payload sizes.
+- [x] Reject malformed magic/version and invalid lengths with typed protocol errors.
+- [x] Add tests for valid frames, partial reads, malformed headers, oversized metadata, oversized payload, zero-length payload, and JSON metadata round trip.
+- [x] Do not wire new code into live feature flows yet unless the touched feature is fully replaced in the same milestone.
+- [x] Run `flutter analyze`.
+- [x] Run protocol tests if available.
 
 Done means:
 
@@ -178,25 +185,25 @@ No manual device test required unless the agent has both peer builds available. 
 
 Codex work:
 
-- [ ] Add an Android `SessionManager` or equivalent single owner for:
+- [x] Add an Android `SessionManager` or equivalent single owner for:
   - current session id
   - peer info
   - role
-  - control/bulk/realtime sockets or channels
+  - control/bulk sockets or channels, plus reserved/no-op realtime scaffolding
   - accept/connect retries
   - handshake
   - heartbeat
   - teardown
   - disconnect reason
-- [ ] Add a transport abstraction so raw sockets are hidden behind:
+- [x] Add a transport abstraction so raw sockets are hidden behind:
   - connect
   - accept
   - read frame
   - write frame
   - close
   - cancel
-- [ ] Route post-link setup from `MainActivity.kt` to the session manager.
-- [ ] Implement connection phases:
+- [x] Route post-link setup from `MainActivity.kt` to the session manager.
+- [x] Implement connection phases:
   - `WifiDirectConnected`
   - `ConnectingTransport`
   - `Handshaking`
@@ -205,15 +212,15 @@ Codex work:
   - `Disconnecting`
   - `Disconnected`
   - `Failed`
-- [ ] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map.
-- [ ] Implement heartbeat and timeout.
-- [ ] Make cleanup idempotent.
-- [ ] Ensure all long-running reads/writes stop during disconnect, app destroy, or session replacement.
-- [ ] Add MethodChannel events for session state, session ready, session failed, peer not running app, and disconnect reason.
-- [ ] Start replacing `SocketConnectionManager` responsibilities with the session manager. Do not leave duplicate raw socket lifecycle owners.
-- [ ] Add focused tests for state transitions where practical.
-- [ ] Run `flutter analyze`.
-- [ ] Run `flutter test`.
+- [x] Implement handshake with app id, protocol min/max, platform, app version, device name, role, session id, capabilities, and port/channel map.
+- [x] Implement heartbeat and timeout.
+- [x] Make cleanup idempotent.
+- [x] Ensure all long-running reads/writes stop during disconnect, app destroy, or session replacement.
+- [x] Add MethodChannel events for session state, session ready, session failed, peer not running app, and disconnect reason.
+- [x] Start replacing `SocketConnectionManager` responsibilities with the session manager. Do not leave duplicate raw socket lifecycle owners.
+- [x] Add focused tests for state transitions where practical.
+- [x] Run `flutter analyze`.
+- [x] Run `flutter test`.
 
 Done means:
 
@@ -229,24 +236,25 @@ Manual test gate only after matching Windows support exists, or when testing And
 
 Codex work:
 
-- [ ] Extend Dart models/events for session state and disconnect reasons.
-- [ ] Update `WiFiDirectController` so feature tabs are enabled only after `Ready`.
-- [ ] Keep Wi-Fi Direct "connected" separate from app "ready".
-- [ ] Replace chat send/receive with `control` frames.
-- [ ] Include message id, timestamp, sender platform, and session id in chat metadata.
-- [ ] Add chat send result/failure handling instead of assuming optimistic send success.
-- [ ] Preserve message ordering per session.
-- [ ] Show a clear error when the peer is connected by Wi-Fi Direct but not running the upgraded WDCable protocol.
-- [ ] Delete the old chat socket path from the live app flow.
-- [ ] Add Dart tests for controller handling of ready/fail/chat events.
-- [ ] Run `flutter analyze`.
-- [ ] Run `flutter test`.
+- [x] Extend Dart models/events for session state and disconnect reasons.
+- [x] Update `WiFiDirectController` so feature tabs are enabled only after `Ready`.
+- [x] Keep Wi-Fi Direct "connected" separate from app "ready".
+- [x] Replace chat send/receive with `control` frames.
+- [x] Include message id, timestamp, sender platform, and session id in chat metadata.
+- [x] Add chat send result/failure handling instead of assuming optimistic send success.
+- [x] Preserve message ordering per session.
+- [x] Show a clear error when the peer is connected by Wi-Fi Direct but not running the upgraded WDCable protocol.
+- [x] Delete the old chat socket path from the live app flow.
+- [x] Add Dart tests for controller handling of ready/fail/chat events.
+- [x] Run `flutter analyze`.
+- [x] Run `flutter test`.
 
 Manual test gate:
 
-- [ ] Android-to-Android or Android-to-Windows reaches `Ready`.
-- [ ] Send 10 chat messages each direction.
-- [ ] Disconnect and reconnect 5 times.
+- [x] Android-to-Android reaches `Ready`.
+- [ ] Android-to-Windows reaches `Ready`.
+- [x] Send chat messages each direction on Android-to-Android.
+- [x] Disconnect and reconnect on Android-to-Android.
 - [ ] Connect to a peer that has Wi-Fi Direct but not the upgraded WDCable protocol and confirm clear failure.
 
 Done means:
@@ -262,16 +270,15 @@ Manual test gate only after matching peer support exists.
 
 Codex work:
 
-- [ ] Implement reliable bulk stream API:
+- [x] Implement reliable bulk stream API:
   - open stream
   - send metadata
   - send chunks
-  - ack start
-  - ack complete
+  - best-effort ack/error on `control`
   - cancel
   - error
   - close
-- [ ] Replace Android file send/receive:
+- [x] Replace Android file send/receive:
   - transfer id
   - safe file name metadata
   - unknown-size content URI support
@@ -279,28 +286,28 @@ Codex work:
   - duplicate filename handling
   - partial-file cleanup
   - checksum or hash on complete when practical
-- [ ] Replace Android speed test:
+- [x] Replace Android speed test:
   - test id
   - upload/download direction
   - timeout
   - cancel
   - failure result
   - no concurrent tests on the same session unless explicitly supported
-- [ ] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
-- [ ] Remove `SPEED_TEST_*` string headers from the live path.
-- [ ] Update Flutter transfer/speed states from protocol progress events.
-- [ ] Run `flutter analyze`.
-- [ ] Run `flutter test`.
+- [x] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
+- [x] Remove `SPEED_TEST_*` string headers from the live path.
+- [x] Update Flutter transfer/speed states from protocol progress events.
+- [x] Run `flutter analyze`.
+- [x] Run `flutter test`.
 
 Manual test gate:
 
-- [ ] Transfer a small text file.
-- [ ] Transfer a duplicate filename twice.
+- [x] Transfer files Android-to-Android.
+- [x] Transfer a duplicate filename twice Android-to-Android.
+- [x] Transfer Android content URI media Android-to-Android.
 - [ ] Transfer a zero-byte file if available.
-- [ ] Transfer Android content URI media.
 - [ ] Interrupt transfer by closing peer app or turning Wi-Fi off.
-- [ ] Run upload and download speed tests 5 times.
-- [ ] Disconnect during speed test and reconnect.
+- [x] Run upload and download speed tests Android-to-Android.
+- [x] Disconnect during speed test and reconnect Android-to-Android.
 
 Done means:
 
@@ -315,38 +322,39 @@ Manual test gate required.
 
 Codex work:
 
-- [ ] Add structured ring-buffer logging for:
+- [x] Add structured ring-buffer logging for:
   - Wi-Fi Direct
   - session
   - transport
   - protocol
   - control
   - bulk
-  - realtime
+  - reserved realtime/no-op transport
   - chat
   - file
   - speed
   - permissions
   - UI
-- [ ] Add export/copy logs from Android UI.
-- [ ] Include timestamp, session id, peer platform, role, channel, stream id, transfer id/test id, and disconnect reason in important logs.
-- [ ] Add protocol and session tests where practical.
-- [ ] Delete remaining raw socket feature code and stale scaffolding after chat/file/speed/streaming use the new runtime.
-- [ ] Ensure `flutter analyze` is clean.
-- [ ] Ensure `flutter test` passes.
-- [ ] Update README or release notes with the new manual QA checklist.
+- [x] Add export/copy logs from Android UI.
+- [x] Include timestamp, session id, peer platform, role, channel, stream id, transfer id/test id, and disconnect reason in important logs.
+- [x] Add protocol and session tests where practical.
+- [x] Delete remaining raw socket feature code and stale scaffolding after chat/file/speed use the new runtime.
+- [x] Ensure `flutter analyze` is clean.
+- [x] Ensure `flutter test` passes.
+- [x] Update README or release notes with the new manual QA checklist.
 
 Manual test gate:
 
-- [ ] Android-to-Android full flow.
+- [x] Android-to-Android full flow.
 - [ ] Android-to-Windows full flow in both initiation directions.
-- [ ] Chat, file, speed, and audio streaming.
+- [x] Chat, file, and speed on Android-to-Android.
 - [ ] Peer app missing.
 - [ ] Outdated app build shows a clear upgrade-required failure.
 - [ ] Reconnect loop 10 times.
-- [ ] Wi-Fi off mid-transfer and mid-stream.
-- [ ] Export logs after one success and one failure.
+- [ ] Wi-Fi off mid-transfer and during speed test.
+- [x] Export logs available after one success and one failure.
 
 Done means:
 
-- Android is ready for coordinated release validation with Windows.
+- Android-to-Android chat/file/speed validation is complete enough for follow-up tuning.
+- Android-to-Windows coordinated release validation is still pending.
