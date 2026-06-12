@@ -45,7 +45,7 @@ class _FileTransferTabState extends State<FileTransferTab>
   }
 
   Future<void> _pickAndSendFile() async {
-    if (widget.state.connectionInfo?.isConnected != true) {
+    if (!widget.state.isSessionReady) {
       _showSnackBar(
         AppLocalizations.of(context)!.pleaseConnectToPeerFirst,
         Colors.orange,
@@ -65,14 +65,19 @@ class _FileTransferTabState extends State<FileTransferTab>
         final String fileName = fileInfo['name'];
 
         _uploadAnimationController.forward();
-        await widget.controller.sendFile(filePath, fileName: fileName);
+        final sent = await widget.controller.sendFile(
+          filePath,
+          fileName: fileName,
+        );
 
         if (!mounted) return;
 
-        _showSnackBar(
-          AppLocalizations.of(context)!.fileSent(fileName),
-          Colors.green,
-        );
+        if (sent) {
+          _showSnackBar(
+            AppLocalizations.of(context)!.fileSent(fileName),
+            Colors.green,
+          );
+        }
         _uploadAnimationController.reverse();
       }
       // If result is null (no file selected), just return without showing error
@@ -100,7 +105,7 @@ class _FileTransferTabState extends State<FileTransferTab>
 
   @override
   Widget build(BuildContext context) {
-    final isConnected = widget.state.connectionInfo?.isConnected ?? false;
+    final isConnected = widget.state.isSessionReady;
     final theme = Theme.of(context);
 
     return SingleChildScrollView(
@@ -585,6 +590,7 @@ class _FileTransferTabState extends State<FileTransferTab>
   }
 
   String _formatFileSize(int bytes) {
+    if (bytes < 0) return 'Unknown size';
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) {

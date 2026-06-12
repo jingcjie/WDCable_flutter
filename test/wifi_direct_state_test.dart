@@ -134,6 +134,36 @@ void main() {
       expect(controller.currentState.pendingPeerAddress, isNull);
     });
 
+    test('keeps peer list visible while connection is pending', () async {
+      final peer = WiFiDirectDevice(
+        deviceName: 'Peer',
+        deviceAddress: 'aa:bb:cc:dd:ee:ff',
+        status: 3,
+      );
+
+      service.emit(PeersChangedEvent([peer]));
+      await pumpEventQueue();
+
+      await controller.connectToPeer(peer);
+      await pumpEventQueue();
+
+      service.emit(PeersChangedEvent(const []));
+      service.emit(
+        ConnectionChangedEvent(
+          WiFiDirectConnectionInfo(
+            isConnected: false,
+            isGroupOwner: false,
+            groupOwnerAddress: null,
+          ),
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.isConnecting, isTrue);
+      expect(controller.currentState.pendingPeerAddress, peer.deviceAddress);
+      expect(controller.currentState.peers, [peer]);
+    });
+
     test('reset clears live connection and transfer state', () async {
       final peer = WiFiDirectDevice(
         deviceName: 'Peer',
@@ -156,7 +186,8 @@ void main() {
 
       expect(controller.currentState.peers, isNotEmpty);
       expect(controller.currentState.connectionInfo?.isConnected, isTrue);
-      expect(controller.currentState.isServerStarted, isTrue);
+      expect(controller.currentState.sessionState, 'WifiDirectConnected');
+      expect(controller.currentState.isServerStarted, isFalse);
       expect(controller.currentState.currentFileTransfer, isNotNull);
 
       await controller.resetWifiDirectSettings();
@@ -170,6 +201,70 @@ void main() {
       expect(controller.currentState.isSpeedTesting, isFalse);
       expect(controller.currentState.lastSpeedTest, isNull);
       expect(controller.currentState.currentFileTransfer, isNull);
+    });
+
+    test(
+      'chat send waits for session ready after Wi-Fi Direct connects',
+      () async {
+        service.emit(
+          ConnectionChangedEvent(
+            WiFiDirectConnectionInfo(
+              isConnected: true,
+              isGroupOwner: false,
+              groupOwnerAddress: '192.168.49.1',
+            ),
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.sendMessage('hello before ready');
+        await pumpEventQueue();
+
+        expect(service.sentMessages, isEmpty);
+        expect(
+          controller.currentState.logs.last,
+          contains('session is not ready'),
+        );
+
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-1',
+            role: 'client',
+            protocolVersion: 1,
+            capabilities: const ['control.chat'],
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.sendMessage('hello after ready');
+        await pumpEventQueue();
+
+        expect(service.sentMessages, ['hello after ready']);
+        expect(controller.currentState.isSessionReady, isTrue);
+        expect(
+          controller.currentState.chatMessages.last.content,
+          'hello after ready',
+        );
+      },
+    );
+
+    test('peer protocol missing is surfaced as failed session', () async {
+      service.emit(
+        PeerProtocolMissingEvent(
+          reason: 'peer_protocol_missing',
+          message: 'Timed out waiting for WDCable handshake',
+          sessionId: 'session-2',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.sessionState, 'Failed');
+      expect(controller.currentState.disconnectReason, 'peer_protocol_missing');
+      expect(controller.currentState.isSessionReady, isFalse);
+      expect(
+        controller.currentState.logs.last,
+        contains('not running the upgraded WDCable protocol'),
+      );
     });
 
     test('bounds in-memory logs', () async {
@@ -193,6 +288,7 @@ class _FakeWiFiDirectService extends WiFiDirectService {
       StreamController<WiFiDirectEvent>.broadcast();
 
   int connectCalls = 0;
+  final List<String> sentMessages = [];
 
   @override
   Stream<WiFiDirectEvent> get eventStream => _events.stream;
@@ -224,6 +320,12 @@ class _FakeWiFiDirectService extends WiFiDirectService {
   Future<String> connectToPeer(String deviceAddress) async {
     connectCalls++;
     return 'Connection initiated';
+  }
+
+  @override
+  Future<String> sendData(String data) async {
+    sentMessages.add(data);
+    return 'Message sent';
   }
 
   @override

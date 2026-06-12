@@ -9,6 +9,8 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.example.wifi_direct_cable.diagnostics.DiagnosticsLogger
+import com.example.wifi_direct_cable.session.SessionManager
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -17,7 +19,7 @@ class FlutterMethodChannelHandler(
     private val context: Context,
     private val methodChannel: MethodChannel,
     private val wifiDirectManager: WiFiDirectManager,
-    private val socketManager: SocketConnectionManager,
+    private val sessionManager: SessionManager,
     private val chatService: ChatService,
     private val speedTestService: SpeedTestService,
     private val fileTransferService: FileTransferService,
@@ -28,6 +30,7 @@ class FlutterMethodChannelHandler(
         context.getSharedPreferences("wifi_direct_cable_prefs", Context.MODE_PRIVATE)
     
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        DiagnosticsLogger.log("ui", "Method call", mapOf("method" to call.method))
         when (call.method) {
             "discoverPeers" -> {
                 wifiDirectManager.discoverPeers(result)
@@ -37,7 +40,7 @@ class FlutterMethodChannelHandler(
                 wifiDirectManager.connectToPeer(deviceAddress, result)
             }
             "disconnect" -> {
-                socketManager.cleanup()
+                sessionManager.disconnect("user_requested")
                 wifiDirectManager.disconnect(result)
             }
             "sendData" -> {
@@ -53,12 +56,19 @@ class FlutterMethodChannelHandler(
                 val bufferSize = call.argument<Int>("bufferSize") ?: 8192
                 val timeout = call.argument<Int>("timeout") ?: 30000
                 val keepAlive = call.argument<Boolean>("keepAlive") ?: true
-                socketManager.configureTcpSettings(bufferSize, timeout, keepAlive)
-                result.success("TCP settings configured")
+                sessionManager.configureTransportSettings(bufferSize, timeout, keepAlive)
+                result.success("Transport settings configured")
             }
             "getConnectionStats" -> {
-                val stats = socketManager.getConnectionStats()
+                val stats = sessionManager.getConnectionStats()
                 result.success(stats)
+            }
+            "getDiagnosticLogs" -> {
+                result.success(DiagnosticsLogger.exportText())
+            }
+            "clearDiagnosticLogs" -> {
+                DiagnosticsLogger.clear()
+                result.success("Diagnostic logs cleared")
             }
             "getDeviceSettings" -> {
                 getDeviceSettings(result)
@@ -73,7 +83,7 @@ class FlutterMethodChannelHandler(
                 wifiDirectManager.stopDiscovery(result)
             }
             "resetWifiDirectSettings" -> {
-                socketManager.cleanup()
+                sessionManager.disconnect("reset_requested")
                 wifiDirectManager.resetWifiDirectSettings(result)
             }
             "setSpeedTesting" -> {
@@ -160,7 +170,7 @@ class FlutterMethodChannelHandler(
     
     private fun getDeviceSettings(result: MethodChannel.Result) {
         val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val stats = socketManager.getConnectionStats()
+        val stats = sessionManager.getConnectionStats()
         val isConnected = stats["isConnected"] as? Boolean ?: false
         val settings = mapOf(
             "wifiEnabled" to wifiManager.isWifiEnabled,
@@ -169,9 +179,13 @@ class FlutterMethodChannelHandler(
             "deviceName" to Build.MODEL,
             "deviceAddress" to "Unavailable",
             "isGroupOwner" to (stats["isGroupOwner"] as? Boolean ?: false),
-            "chatServerRunning" to (stats["isChatServerRunning"] as? Boolean ?: false),
-            "speedTestServerRunning" to (stats["isSpeedTestServerRunning"] as? Boolean ?: false),
-            "fileTransferServerRunning" to (stats["isFileTransferServerRunning"] as? Boolean ?: false),
+            "chatServerRunning" to (stats["controlChannelOpen"] as? Boolean ?: false),
+            "speedTestServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
+            "fileTransferServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
+            "sessionState" to (stats["sessionState"] as? String ?: "Disconnected"),
+            "sessionId" to (stats["sessionId"] as? String ?: ""),
+            "sessionReady" to (stats["isReady"] as? Boolean ?: false),
+            "disconnectReason" to (stats["disconnectReason"] as? String ?: ""),
             "discoveredDevicesCount" to wifiDirectManager.discoveredDevicesCount,
             "connectedClientsCount" to if (isConnected) 1 else 0,
             "locationPermissionGranted" to permissionManager.hasLocationPermission(),

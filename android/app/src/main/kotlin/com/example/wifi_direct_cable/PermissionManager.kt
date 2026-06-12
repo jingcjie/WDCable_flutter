@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import io.flutter.plugin.common.MethodChannel
 
 class PermissionManager(
@@ -28,7 +29,14 @@ class PermissionManager(
         }
         
         if (permissions.isNotEmpty()) {
+            DiagnosticsLogger.log(
+                "permissions",
+                "Requesting permissions",
+                mapOf("permissions" to permissions.joinToString(","))
+            )
             ActivityCompat.requestPermissions(activity, permissions.toTypedArray(), REQUEST_PERMISSIONS)
+        } else {
+            DiagnosticsLogger.log("permissions", "Required permissions already granted")
         }
     }
     
@@ -38,10 +46,17 @@ class PermissionManager(
                 index >= grantResults.size || grantResults[index] != PackageManager.PERMISSION_GRANTED
             }
             if (deniedPermissions.isNotEmpty()) {
+                DiagnosticsLogger.log(
+                    "permissions",
+                    "Permissions denied",
+                    mapOf("permissions" to deniedPermissions.joinToString(","))
+                )
                 methodChannel.invokeMethod("onPermissionDenied", mapOf(
                     "permissions" to deniedPermissions,
                     "capabilities" to deniedPermissions.map { permissionToCapability(it) }
                 ))
+            } else {
+                DiagnosticsLogger.log("permissions", "Permissions granted")
             }
         }
     }

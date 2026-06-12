@@ -39,6 +39,10 @@ android {
     }
 }
 
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}
+
 flutter {
     source = "../.."
 }

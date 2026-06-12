@@ -81,3 +81,15 @@ Contributions are what make the open-source community such an amazing place to l
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
+## Android Release QA Checklist
+
+Use this checklist before coordinated Windows validation:
+
+- Android-to-Android: connect both initiation directions and confirm both reach `Ready`.
+- Chat: send 10 messages each direction.
+- File: send a small text file, the same filename twice, a zero-byte file, and a media/content URI.
+- Speed: run download/upload speed tests 5 times.
+- Failure: close the peer app during file transfer, turn Wi-Fi off during speed test, then reconnect.
+- Missing peer app: connect to a Wi-Fi Direct peer without the upgraded WDCable protocol and confirm a clear protocol-missing failure.
+- Diagnostics: use the copy icon in the Connection tab logs header after one success and one failure, then save the copied text with the test report.
+- Current limitation: realtime audio streaming is not implemented until F-E, so F-F audio-streaming release checks remain blocked.

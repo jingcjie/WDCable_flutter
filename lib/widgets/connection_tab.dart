@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/wifi_direct_models.dart';
 import '../controllers/wifi_direct_controller.dart';
 import 'package:wifi_direct_cable/l10n/app_localizations.dart';
@@ -85,9 +86,9 @@ class ConnectionTab extends StatelessWidget {
   }
 
   Widget _buildConnectionStatus(BuildContext context) {
-    final isConnected = state.connectionInfo?.isConnected == true;
-    final statusText = isConnected
-        ? AppLocalizations.of(context)!.connected
+    final hasWifiDirectLink = state.hasWifiDirectLink;
+    final statusText = hasWifiDirectLink
+        ? '${AppLocalizations.of(context)!.connected} / ${state.sessionState}'
         : state.isConnecting
         ? 'Connecting...'
         : AppLocalizations.of(context)!.disconnected;
@@ -106,8 +107,8 @@ class ConnectionTab extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isConnected ? Icons.link : Icons.link_off,
-            color: isConnected ? Colors.green : Colors.red,
+            state.isSessionReady ? Icons.link : Icons.link_off,
+            color: state.isSessionReady ? Colors.green : Colors.red,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -352,7 +353,7 @@ class ConnectionTab extends StatelessWidget {
       return const _PeerAction('Invited', false);
     }
 
-    if (state.isConnecting || state.connectionInfo?.isConnected == true) {
+    if (state.isConnecting || state.hasWifiDirectLink) {
       return _PeerAction(AppLocalizations.of(context)!.connect, false);
     }
 
@@ -386,11 +387,19 @@ class ConnectionTab extends StatelessWidget {
               children: [
                 const Icon(Icons.terminal, size: 16),
                 const SizedBox(width: 8),
-                Text(
-                  AppLocalizations.of(context)!.systemLogs,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    AppLocalizations.of(context)!.systemLogs,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Copy diagnostics',
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: () => _copyDiagnostics(context),
+                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -417,6 +426,21 @@ class ConnectionTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _copyDiagnostics(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final logs = await controller.getDiagnosticLogs();
+      await Clipboard.setData(ClipboardData(text: logs));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Diagnostics copied')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to copy diagnostics: $e')),
+      );
+    }
   }
 
   Color _getStatusColor(int status) {

@@ -20,6 +20,67 @@ class ConnectionChangedEvent extends WiFiDirectEvent {
   ConnectionChangedEvent(this.connectionInfo);
 }
 
+class SessionStateChangedEvent extends WiFiDirectEvent {
+  final String state;
+  final String sessionId;
+  final String role;
+  final String groupOwnerAddress;
+  final String disconnectReason;
+
+  SessionStateChangedEvent({
+    required this.state,
+    required this.sessionId,
+    required this.role,
+    required this.groupOwnerAddress,
+    required this.disconnectReason,
+  });
+}
+
+class SessionReadyEvent extends WiFiDirectEvent {
+  final String sessionId;
+  final String role;
+  final int protocolVersion;
+  final List<String> capabilities;
+
+  SessionReadyEvent({
+    required this.sessionId,
+    required this.role,
+    required this.protocolVersion,
+    required this.capabilities,
+  });
+}
+
+class SessionFailedEvent extends WiFiDirectEvent {
+  final String reason;
+  final String message;
+  final String sessionId;
+
+  SessionFailedEvent({
+    required this.reason,
+    required this.message,
+    required this.sessionId,
+  });
+}
+
+class PeerProtocolMissingEvent extends WiFiDirectEvent {
+  final String reason;
+  final String message;
+  final String sessionId;
+
+  PeerProtocolMissingEvent({
+    required this.reason,
+    required this.message,
+    required this.sessionId,
+  });
+}
+
+class DisconnectReasonEvent extends WiFiDirectEvent {
+  final String reason;
+  final String sessionId;
+
+  DisconnectReasonEvent({required this.reason, required this.sessionId});
+}
+
 class DataReceivedEvent extends WiFiDirectEvent {
   final String message;
   final int? timestamp;
@@ -35,7 +96,11 @@ class SpeedTestDataReceivedEvent extends WiFiDirectEvent {
   final int bytesReceived;
   final int durationMs;
   final double speedMbps;
-  SpeedTestDataReceivedEvent(this.bytesReceived, this.durationMs, this.speedMbps);
+  SpeedTestDataReceivedEvent(
+    this.bytesReceived,
+    this.durationMs,
+    this.speedMbps,
+  );
 }
 
 class SpeedTestReceiveProgressEvent extends WiFiDirectEvent {
@@ -43,7 +108,12 @@ class SpeedTestReceiveProgressEvent extends WiFiDirectEvent {
   final int totalBytes;
   final double speedMbps;
   final double progress;
-  SpeedTestReceiveProgressEvent(this.bytesReceived, this.totalBytes, this.speedMbps, this.progress);
+  SpeedTestReceiveProgressEvent(
+    this.bytesReceived,
+    this.totalBytes,
+    this.speedMbps,
+    this.progress,
+  );
 }
 
 class SpeedTestSendProgressEvent extends WiFiDirectEvent {
@@ -51,7 +121,12 @@ class SpeedTestSendProgressEvent extends WiFiDirectEvent {
   final int totalBytes;
   final double speedMbps;
   final double progress;
-  SpeedTestSendProgressEvent(this.bytesSent, this.totalBytes, this.speedMbps, this.progress);
+  SpeedTestSendProgressEvent(
+    this.bytesSent,
+    this.totalBytes,
+    this.speedMbps,
+    this.progress,
+  );
 }
 
 class FileReceiveProgressEvent extends WiFiDirectEvent {
@@ -108,154 +183,278 @@ class DebugEvent extends WiFiDirectEvent {
 
 class WiFiDirectService {
   static const MethodChannel _channel = MethodChannel('wifi_direct_cable');
-  
+
   // Event stream controller
-  final StreamController<WiFiDirectEvent> _eventController = StreamController<WiFiDirectEvent>.broadcast();
-  
+  final StreamController<WiFiDirectEvent> _eventController =
+      StreamController<WiFiDirectEvent>.broadcast();
+
   // Public stream for events
   Stream<WiFiDirectEvent> get eventStream => _eventController.stream;
-  
+
   WiFiDirectService() {
     _channel.setMethodCallHandler(_handleMethodCall);
   }
-  
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     try {
       switch (call.method) {
         case 'onPeersChanged':
           final List<dynamic> peersData = call.arguments;
-          final peers = peersData.map((data) => WiFiDirectDevice.fromMap(Map<String, dynamic>.from(data as Map))).toList();
+          final peers = peersData
+              .map(
+                (data) => WiFiDirectDevice.fromMap(
+                  Map<String, dynamic>.from(data as Map),
+                ),
+              )
+              .toList();
           _eventController.add(PeersChangedEvent(peers));
           break;
-          
+
         case 'onWifiP2pStateChanged':
           final bool enabled = call.arguments;
           _eventController.add(WiFiP2pStateChangedEvent(enabled));
           break;
-          
+
         case 'onConnectionChanged':
-          final Map<String, dynamic> connectionData = Map<String, dynamic>.from(call.arguments as Map);
-          final connectionInfo = WiFiDirectConnectionInfo.fromMap(connectionData);
+          final Map<String, dynamic> connectionData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          final connectionInfo = WiFiDirectConnectionInfo.fromMap(
+            connectionData,
+          );
           _eventController.add(ConnectionChangedEvent(connectionInfo));
           break;
-          
+
+        case 'onSessionStateChanged':
+          final Map<String, dynamic> sessionData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            SessionStateChangedEvent(
+              state: sessionData['state']?.toString() ?? 'Disconnected',
+              sessionId: sessionData['sessionId']?.toString() ?? '',
+              role: sessionData['role']?.toString() ?? '',
+              groupOwnerAddress:
+                  sessionData['groupOwnerAddress']?.toString() ?? '',
+              disconnectReason:
+                  sessionData['disconnectReason']?.toString() ?? '',
+            ),
+          );
+          break;
+
+        case 'onSessionReady':
+          final Map<String, dynamic> sessionData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          final capabilities = sessionData['capabilities'];
+          _eventController.add(
+            SessionReadyEvent(
+              sessionId: sessionData['sessionId']?.toString() ?? '',
+              role: sessionData['role']?.toString() ?? '',
+              protocolVersion: sessionData['protocolVersion'] is int
+                  ? sessionData['protocolVersion'] as int
+                  : int.tryParse(
+                          sessionData['protocolVersion']?.toString() ?? '',
+                        ) ??
+                        0,
+              capabilities: capabilities is List
+                  ? capabilities.map((item) => item.toString()).toList()
+                  : const [],
+            ),
+          );
+          break;
+
+        case 'onSessionFailed':
+          final Map<String, dynamic> failureData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            SessionFailedEvent(
+              reason: failureData['reason']?.toString() ?? 'session_failed',
+              message: failureData['message']?.toString() ?? 'Session failed',
+              sessionId: failureData['sessionId']?.toString() ?? '',
+            ),
+          );
+          break;
+
+        case 'onPeerProtocolMissing':
+          final Map<String, dynamic> failureData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            PeerProtocolMissingEvent(
+              reason:
+                  failureData['reason']?.toString() ?? 'peer_protocol_missing',
+              message:
+                  failureData['message']?.toString() ??
+                  'Peer is not running the upgraded WDCable protocol',
+              sessionId: failureData['sessionId']?.toString() ?? '',
+            ),
+          );
+          break;
+
+        case 'onDisconnectReason':
+          final Map<String, dynamic> disconnectData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            DisconnectReasonEvent(
+              reason: disconnectData['reason']?.toString() ?? '',
+              sessionId: disconnectData['sessionId']?.toString() ?? '',
+            ),
+          );
+          break;
+
         case 'onDataReceived':
           if (call.arguments is Map) {
             // New JSON format with message and timestamp
-            final Map<String, dynamic> messageData = Map<String, dynamic>.from(call.arguments as Map);
-            _eventController.add(DataReceivedEvent(
-              messageData['message'] as String,
-              timestamp: messageData['timestamp'] as int?,
-            ));
+            final Map<String, dynamic> messageData = Map<String, dynamic>.from(
+              call.arguments as Map,
+            );
+            _eventController.add(
+              DataReceivedEvent(
+                messageData['message'] as String,
+                timestamp: messageData['timestamp'] as int?,
+              ),
+            );
           } else {
             // Backward compatibility: plain string
             final String data = call.arguments as String;
             _eventController.add(DataReceivedEvent(data));
           }
           break;
-          
+
         case 'onBinaryDataReceived':
           final Uint8List data = call.arguments;
           _eventController.add(BinaryDataReceivedEvent(data));
           break;
-          
+
         case 'onSpeedTestDataReceived':
-          final Map<String, dynamic> speedData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(SpeedTestDataReceivedEvent(
-            speedData['bytesReceived'],
-            speedData['durationMs'],
-            speedData['speedMbps'].toDouble(),
-          ));
+          final Map<String, dynamic> speedData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            SpeedTestDataReceivedEvent(
+              speedData['bytesReceived'],
+              speedData['durationMs'],
+              speedData['speedMbps'].toDouble(),
+            ),
+          );
           break;
-          
+
         case 'onSpeedTestReceiveProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(SpeedTestReceiveProgressEvent(
-            progressData['bytesReceived'],
-            progressData['totalBytes'],
-            progressData['speedMbps'].toDouble(),
-            progressData['progress'].toDouble(),
-          ));
+          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            SpeedTestReceiveProgressEvent(
+              progressData['bytesReceived'],
+              progressData['totalBytes'],
+              progressData['speedMbps'].toDouble(),
+              progressData['progress'].toDouble(),
+            ),
+          );
           break;
-          
+
         case 'onSpeedTestSendProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(SpeedTestSendProgressEvent(
-            progressData['bytesSent'],
-            progressData['totalBytes'],
-            progressData['speedMbps'].toDouble(),
-            progressData['progress'].toDouble(),
-          ));
+          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            SpeedTestSendProgressEvent(
+              progressData['bytesSent'],
+              progressData['totalBytes'],
+              progressData['speedMbps'].toDouble(),
+              progressData['progress'].toDouble(),
+            ),
+          );
           break;
-          
+
         case 'onFileReceiveStarted':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(FileReceiveStartedEvent(
-            fileData['fileName'],
-            fileData['fileSize'],
-          ));
+          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            FileReceiveStartedEvent(fileData['fileName'], fileData['fileSize']),
+          );
           break;
-          
+
         case 'onFileSendStarted':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(FileSendStartedEvent(
-            fileData['fileName'],
-            fileData['fileSize'],
-          ));
+          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            FileSendStartedEvent(fileData['fileName'], fileData['fileSize']),
+          );
           break;
-          
+
         case 'onFileReceiveProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(FileReceiveProgressEvent(
-            progressData['fileName'],
-            progressData['progress'].toDouble(),
-          ));
+          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            FileReceiveProgressEvent(
+              progressData['fileName'],
+              progressData['progress'].toDouble(),
+            ),
+          );
           break;
-          
+
         case 'onFileSendProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(FileSendProgressEvent(
-            progressData['fileName'],
-            progressData['progress'].toDouble(),
-          ));
+          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            FileSendProgressEvent(
+              progressData['fileName'],
+              progressData['progress'].toDouble(),
+            ),
+          );
           break;
-          
+
         case 'onFileReceived':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(call.arguments as Map);
-          _eventController.add(FileReceivedEvent(
-            fileData['fileName'],
-            filePath: fileData['filePath'],
-          ));
+          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            FileReceivedEvent(
+              fileData['fileName'],
+              filePath: fileData['filePath'],
+            ),
+          );
           break;
-          
+
         case 'onError':
           final String error = call.arguments;
           _eventController.add(ErrorEvent(error));
           break;
-          
+
         case 'onWifiDirectReset':
           _eventController.add(WiFiDirectResetEvent());
           break;
-          
+
         case 'onPermissionDenied':
           if (call.arguments is Map) {
-            final Map<String, dynamic> permissionData = Map<String, dynamic>.from(call.arguments as Map);
+            final Map<String, dynamic> permissionData =
+                Map<String, dynamic>.from(call.arguments as Map);
             final capabilities = permissionData['capabilities'];
-            _eventController.add(PermissionDeniedEvent(
-              capabilities is List
-                  ? capabilities.map((item) => item.toString()).toList()
-                  : const [],
-            ));
+            _eventController.add(
+              PermissionDeniedEvent(
+                capabilities is List
+                    ? capabilities.map((item) => item.toString()).toList()
+                    : const [],
+              ),
+            );
           } else {
             _eventController.add(PermissionDeniedEvent());
           }
           break;
-          
+
         case 'onClientConnected':
           final String message = call.arguments;
           _eventController.add(ClientConnectedEvent(message));
           break;
-          
+
         case 'onDebug':
           final String message = call.arguments;
           _eventController.add(DebugEvent(message));
@@ -265,7 +464,7 @@ class WiFiDirectService {
       _eventController.add(ErrorEvent('Error handling method call: $e'));
     }
   }
-  
+
   // WiFi Direct operations
   Future<String> discoverPeers() async {
     try {
@@ -275,16 +474,18 @@ class WiFiDirectService {
       throw Exception('Failed to discover peers: $e');
     }
   }
-  
+
   Future<String> connectToPeer(String deviceAddress) async {
     try {
-      final String result = await _channel.invokeMethod('connectToPeer', {'deviceAddress': deviceAddress});
+      final String result = await _channel.invokeMethod('connectToPeer', {
+        'deviceAddress': deviceAddress,
+      });
       return result;
     } catch (e) {
       throw Exception('Failed to connect to peer: $e');
     }
   }
-  
+
   Future<String> disconnect() async {
     try {
       final String result = await _channel.invokeMethod('disconnect');
@@ -293,27 +494,29 @@ class WiFiDirectService {
       throw Exception('Failed to disconnect: $e');
     }
   }
-  
+
   Future<String> sendData(String data) async {
     try {
-      final String result = await _channel.invokeMethod('sendData', {'data': data});
+      final String result = await _channel.invokeMethod('sendData', {
+        'data': data,
+      });
       return result;
     } catch (e) {
       throw Exception('Failed to send data: $e');
     }
   }
-  
 
-  
   Future<String> sendFileStream(String filePath) async {
     try {
-      final String result = await _channel.invokeMethod('sendFileStream', {'filePath': filePath});
+      final String result = await _channel.invokeMethod('sendFileStream', {
+        'filePath': filePath,
+      });
       return result;
     } catch (e) {
       throw Exception('Failed to send file stream: $e');
     }
   }
-  
+
   Future<void> configureTcpSettings({
     required int bufferSize,
     required int timeout,
@@ -329,7 +532,7 @@ class WiFiDirectService {
       throw Exception('Failed to configure TCP settings: $e');
     }
   }
-  
+
   Future<Map<String, dynamic>> getConnectionStats() async {
     try {
       final result = await _channel.invokeMethod('getConnectionStats');
@@ -338,9 +541,25 @@ class WiFiDirectService {
       throw Exception('Failed to get connection stats: $e');
     }
   }
-  
 
-  
+  Future<String> getDiagnosticLogs() async {
+    try {
+      final String result = await _channel.invokeMethod('getDiagnosticLogs');
+      return result;
+    } catch (e) {
+      throw Exception('Failed to get diagnostic logs: $e');
+    }
+  }
+
+  Future<String> clearDiagnosticLogs() async {
+    try {
+      final String result = await _channel.invokeMethod('clearDiagnosticLogs');
+      return result;
+    } catch (e) {
+      throw Exception('Failed to clear diagnostic logs: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> getDeviceSettings() async {
     try {
       final result = await _channel.invokeMethod('getDeviceSettings');
@@ -349,7 +568,7 @@ class WiFiDirectService {
       throw Exception('Failed to get device settings: $e');
     }
   }
-  
+
   Future<bool> isWifiP2pEnabled() async {
     try {
       final bool result = await _channel.invokeMethod('isWifiP2pEnabled');
@@ -358,7 +577,7 @@ class WiFiDirectService {
       throw Exception('Failed to check WiFi P2P status: $e');
     }
   }
-  
+
   Future<Map<String, dynamic>> getDiscoveryStatus() async {
     try {
       final result = await _channel.invokeMethod('getDiscoveryStatus');
@@ -367,7 +586,7 @@ class WiFiDirectService {
       throw Exception('Failed to get discovery status: $e');
     }
   }
-  
+
   Future<void> stopDiscovery() async {
     try {
       await _channel.invokeMethod('stopDiscovery');
@@ -375,16 +594,18 @@ class WiFiDirectService {
       throw Exception('Failed to stop discovery: $e');
     }
   }
-  
+
   Future<String> resetWifiDirectSettings() async {
     try {
-      final String result = await _channel.invokeMethod('resetWifiDirectSettings');
+      final String result = await _channel.invokeMethod(
+        'resetWifiDirectSettings',
+      );
       return result;
     } catch (e) {
       throw Exception('Failed to reset WiFi Direct settings: $e');
     }
   }
-  
+
   Future<void> setSpeedTesting(bool enabled) async {
     try {
       await _channel.invokeMethod('setSpeedTesting', {'enabled': enabled});
@@ -392,20 +613,19 @@ class WiFiDirectService {
       throw Exception('Failed to set speed testing mode: $e');
     }
   }
-  
 
-  
   Future<String> requestSpeedTestData(int sizeBytes) async {
     try {
-      final String result = await _channel.invokeMethod('requestSpeedTestData', {
-        'sizeBytes': sizeBytes,
-      });
+      final String result = await _channel.invokeMethod(
+        'requestSpeedTestData',
+        {'sizeBytes': sizeBytes},
+      );
       return result;
     } catch (e) {
       throw Exception('Failed to request speed test data: $e');
     }
   }
-  
+
   Future<String> sendSpeedTestData(int sizeBytes) async {
     try {
       final String result = await _channel.invokeMethod('sendSpeedTestData', {
@@ -416,7 +636,7 @@ class WiFiDirectService {
       throw Exception('Failed to send speed test data: $e');
     }
   }
-  
+
   void dispose() {
     _eventController.close();
   }

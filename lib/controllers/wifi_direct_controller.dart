@@ -44,6 +44,10 @@ class WiFiDirectController {
       isServerStarted: false,
       peers: const [],
       connectionInfo: null,
+      sessionState: 'Disconnected',
+      sessionId: null,
+      sessionRole: null,
+      disconnectReason: null,
       lastSpeedTest: null,
       isSpeedTesting: false,
       currentFileTransfer: null,
@@ -58,6 +62,12 @@ class WiFiDirectController {
   void _handleEvent(WiFiDirectEvent event) {
     switch (event) {
       case PeersChangedEvent peersEvent:
+        if (_currentState.isConnecting &&
+            peersEvent.peers.isEmpty &&
+            _currentState.peers.isNotEmpty) {
+          _addLog('Peer refresh returned empty while connection is pending');
+          break;
+        }
         _updateState(_currentState.copyWith(peers: peersEvent.peers));
         _addLog('Peers updated: ${peersEvent.peers.length} devices found');
         break;
@@ -79,22 +89,102 @@ class WiFiDirectController {
               connectionInfo: connectionEvent.connectionInfo,
               isConnecting: false,
               pendingPeerAddress: null,
+              sessionState: _currentState.isSessionReady
+                  ? _currentState.sessionState
+                  : 'WifiDirectConnected',
             ),
           );
           final connectionStatus =
-              'Connected as ${connectionEvent.connectionInfo.isGroupOwner ? "Group Owner" : "Client"}';
+              'Wi-Fi Direct connected as ${connectionEvent.connectionInfo.isGroupOwner ? "Group Owner" : "Client"}';
           _addLog(connectionStatus);
           AppLogger.info('[ANDROID CONNECTION] $connectionStatus');
           stopDiscovery();
-          // Multiple servers are now started automatically in Android code
-          _updateState(_currentState.copyWith(isServerStarted: true));
-          _addLog(
-            'Chat server (port 8888), Speed test server (port 8889), and File transfer server (port 8890) are now active',
-          );
+          _addLog('Waiting for WDCable session handshake');
         } else {
+          if (_currentState.isConnecting) {
+            _addLog('Wi-Fi Direct connection is still pending');
+            break;
+          }
           _addLog('Disconnected');
           AppLogger.info('[ANDROID CONNECTION] Disconnected');
           _clearSessionState();
+        }
+        break;
+
+      case SessionStateChangedEvent sessionEvent:
+        _updateState(
+          _currentState.copyWith(
+            sessionState: sessionEvent.state,
+            sessionId: sessionEvent.sessionId.isEmpty
+                ? null
+                : sessionEvent.sessionId,
+            sessionRole: sessionEvent.role.isEmpty ? null : sessionEvent.role,
+            disconnectReason: sessionEvent.disconnectReason.isEmpty
+                ? _currentState.disconnectReason
+                : sessionEvent.disconnectReason,
+            isServerStarted: sessionEvent.state == 'Ready',
+          ),
+        );
+        _addLog('Session state: ${sessionEvent.state}');
+        break;
+
+      case SessionReadyEvent sessionEvent:
+        _updateState(
+          _currentState.copyWith(
+            sessionState: 'Ready',
+            sessionId: sessionEvent.sessionId,
+            sessionRole: sessionEvent.role,
+            disconnectReason: null,
+            isConnecting: false,
+            pendingPeerAddress: null,
+            isServerStarted: true,
+          ),
+        );
+        _addLog(
+          'WDCable session ready (${sessionEvent.role}, protocol v${sessionEvent.protocolVersion})',
+        );
+        break;
+
+      case SessionFailedEvent failureEvent:
+        _updateState(
+          _currentState.copyWith(
+            sessionState: 'Failed',
+            sessionId: failureEvent.sessionId.isEmpty
+                ? _currentState.sessionId
+                : failureEvent.sessionId,
+            disconnectReason: failureEvent.reason,
+            isConnecting: false,
+            pendingPeerAddress: null,
+            isServerStarted: false,
+          ),
+        );
+        _addLog('Session failed: ${failureEvent.message}');
+        break;
+
+      case PeerProtocolMissingEvent missingEvent:
+        _updateState(
+          _currentState.copyWith(
+            sessionState: 'Failed',
+            sessionId: missingEvent.sessionId.isEmpty
+                ? _currentState.sessionId
+                : missingEvent.sessionId,
+            disconnectReason: missingEvent.reason,
+            isConnecting: false,
+            pendingPeerAddress: null,
+            isServerStarted: false,
+          ),
+        );
+        _addLog(
+          'Peer is connected by Wi-Fi Direct but is not running the upgraded WDCable protocol',
+        );
+        break;
+
+      case DisconnectReasonEvent disconnectEvent:
+        if (disconnectEvent.reason.isNotEmpty) {
+          _updateState(
+            _currentState.copyWith(disconnectReason: disconnectEvent.reason),
+          );
+          _addLog('Disconnect reason: ${disconnectEvent.reason}');
         }
         break;
 
@@ -415,8 +505,8 @@ class WiFiDirectController {
       return;
     }
 
-    if (_currentState.connectionInfo?.isConnected != true) {
-      _addLog('Send cancelled: not connected');
+    if (!_currentState.isSessionReady) {
+      _addLog('Send cancelled: WDCable session is not ready');
       return;
     }
 
@@ -458,6 +548,26 @@ class WiFiDirectController {
     }
   }
 
+  Future<String> getDiagnosticLogs() async {
+    try {
+      final logs = await _service.getDiagnosticLogs();
+      _addLog('Diagnostic logs exported');
+      return logs;
+    } catch (e) {
+      _addLog('Failed to export diagnostic logs: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> clearDiagnosticLogs() async {
+    try {
+      final result = await _service.clearDiagnosticLogs();
+      _addLog(result);
+    } catch (e) {
+      _addLog('Failed to clear diagnostic logs: $e');
+    }
+  }
+
   Future<void> stopDiscovery() async {
     try {
       _addLog('Stopping current discovery...');
@@ -487,8 +597,8 @@ class WiFiDirectController {
       return;
     }
 
-    if (_currentState.connectionInfo?.isConnected != true) {
-      _addLog('Speed test cancelled: not connected to peer');
+    if (!_currentState.isSessionReady) {
+      _addLog('Speed test cancelled: WDCable session is not ready');
       return;
     }
 
@@ -697,10 +807,10 @@ class WiFiDirectController {
   }
 
   // File transfer methods
-  Future<void> sendFile(String filePath, {String? fileName}) async {
-    if (_currentState.connectionInfo?.isConnected != true) {
-      _addLog('File send cancelled: not connected');
-      return;
+  Future<bool> sendFile(String filePath, {String? fileName}) async {
+    if (!_currentState.isSessionReady) {
+      _addLog('File send cancelled: WDCable session is not ready');
+      return false;
     }
 
     try {
@@ -726,6 +836,7 @@ class WiFiDirectController {
       // Send file using service (this will trigger progress events)
       final result = await _service.sendFileStream(filePath);
       _addLog('File transfer initiated: $result');
+      return true;
 
       // Note: The transfer completion will be handled by progress events
       // reaching 100% or by error handling
@@ -750,6 +861,7 @@ class WiFiDirectController {
           ),
         );
       }
+      return false;
     }
   }
 
@@ -765,9 +877,7 @@ class WiFiDirectController {
     );
 
     _updateState(_currentState.copyWith(currentFileTransfer: fileTransfer));
-    _addLog(
-      'Starting file receive: $fileName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
-    );
+    _addLog('Starting file receive: $fileName (${_formatSize(fileSize)})');
   }
 
   void _handleFileSendStarted(String fileName, int fileSize) {
@@ -780,9 +890,7 @@ class WiFiDirectController {
       _updateState(
         _currentState.copyWith(currentFileTransfer: updatedTransfer),
       );
-      _addLog(
-        'File send started: $fileName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)',
-      );
+      _addLog('File send started: $fileName (${_formatSize(fileSize)})');
     }
   }
 
@@ -869,6 +977,11 @@ class WiFiDirectController {
         _addLog('Cleared completed transfer: ${currentTransfer.fileName}');
       }
     }
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 0) return 'unknown size';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
   }
 
   void dispose() {

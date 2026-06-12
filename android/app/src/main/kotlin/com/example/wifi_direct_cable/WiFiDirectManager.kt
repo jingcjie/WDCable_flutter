@@ -7,6 +7,7 @@ import android.net.wifi.p2p.*
 import android.net.wifi.WpsInfo
 import android.os.Build
 import androidx.core.app.ActivityCompat
+import com.example.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import io.flutter.plugin.common.MethodChannel
 
 class WiFiDirectManager(
@@ -31,6 +32,7 @@ class WiFiDirectManager(
         this.connectionListener = connectionListener
         wifiP2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager
         channel = wifiP2pManager.initialize(context, context.mainLooper, null)
+        DiagnosticsLogger.log("wifi", "Wi-Fi Direct manager initialized")
         methodChannel.invokeMethod("onDebug", "WiFi Direct manager initialized")
     }
     
@@ -68,11 +70,13 @@ class WiFiDirectManager(
         wifiP2pManager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 result.success("Discovery started")
+                DiagnosticsLogger.log("wifi", "Peer discovery started")
                 methodChannel.invokeMethod("onDebug", "Peer discovery started")
             }
             
             override fun onFailure(reasonCode: Int) {
                 val error = "Discovery failed: $reasonCode"
+                DiagnosticsLogger.log("wifi", "Peer discovery failed", mapOf("reasonCode" to reasonCode))
                 result.error("DISCOVERY_FAILED", error, null)
                 methodChannel.invokeMethod("onError", error)
             }
@@ -100,11 +104,13 @@ class WiFiDirectManager(
         wifiP2pManager.connect(channel, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 result.success("Connection initiated")
+                DiagnosticsLogger.log("wifi", "Connection initiated", mapOf("deviceAddress" to deviceAddress))
                 methodChannel.invokeMethod("onDebug", "Connection initiated to $deviceAddress")
             }
             
             override fun onFailure(reasonCode: Int) {
                 val error = "Connection failed: $reasonCode"
+                DiagnosticsLogger.log("wifi", "Connection failed", mapOf("deviceAddress" to deviceAddress, "reasonCode" to reasonCode))
                 result.error("CONNECTION_FAILED", error, null)
                 methodChannel.invokeMethod("onError", error)
             }
@@ -115,11 +121,13 @@ class WiFiDirectManager(
         wifiP2pManager.removeGroup(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 result.success("Disconnected")
+                DiagnosticsLogger.log("wifi", "Disconnected from group")
                 methodChannel.invokeMethod("onDebug", "Disconnected from group")
             }
             
             override fun onFailure(reasonCode: Int) {
                 result.success("Disconnected") // Still consider it success
+                DiagnosticsLogger.log("wifi", "Group removal failed", mapOf("reasonCode" to reasonCode))
                 methodChannel.invokeMethod("onDebug", "Group removal failed: $reasonCode")
             }
         })
@@ -129,10 +137,12 @@ class WiFiDirectManager(
         wifiP2pManager.stopPeerDiscovery(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 result.success("Discovery stopped")
+                DiagnosticsLogger.log("wifi", "Peer discovery stopped")
             }
             
             override fun onFailure(reasonCode: Int) {
                 result.error("STOP_DISCOVERY_FAILED", "Failed to stop discovery: $reasonCode", null)
+                DiagnosticsLogger.log("wifi", "Stop discovery failed", mapOf("reasonCode" to reasonCode))
             }
         })
     }
@@ -141,11 +151,13 @@ class WiFiDirectManager(
         wifiP2pManager.removeGroup(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 result.success("WiFi Direct settings reset")
+                DiagnosticsLogger.log("wifi", "Wi-Fi Direct settings reset")
                 methodChannel.invokeMethod("onWifiDirectReset", null)
             }
             
             override fun onFailure(reasonCode: Int) {
                 result.success("WiFi Direct settings reset") // Still consider success
+                DiagnosticsLogger.log("wifi", "Wi-Fi Direct reset failed", mapOf("reasonCode" to reasonCode))
                 methodChannel.invokeMethod("onDebug", "WiFi Direct settings reset failed: $reasonCode")
                 methodChannel.invokeMethod("onWifiDirectReset", null)
             }
@@ -160,11 +172,13 @@ class WiFiDirectManager(
     // Called from broadcast receiver
     fun handlePeersAvailable(peers: WifiP2pDeviceList) {
         latestPeersCount = peers.deviceList.size
+        DiagnosticsLogger.log("wifi", "Peers available", mapOf("count" to latestPeersCount))
         connectionListener?.onPeersAvailable(peers)
     }
     
     // Called from broadcast receiver
     fun handleWifiP2pStateChanged(enabled: Boolean) {
+        DiagnosticsLogger.log("wifi", "Wi-Fi P2P state changed", mapOf("enabled" to enabled))
         connectionListener?.onWifiP2pStateChanged(enabled)
     }
 }

@@ -195,7 +195,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
   void _startSpeedTest() async {
     if (!_isTestRunning &&
         !widget.state.isSpeedTesting &&
-        widget.state.connectionInfo?.isConnected == true) {
+        widget.state.isSessionReady) {
       setState(() {
         _isTestRunning = true;
         _downloadProgress = 0.0;
@@ -259,7 +259,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
   }
 
   Widget _buildConnectionStatus(BuildContext context) {
-    final isConnected = widget.state.connectionInfo?.isConnected == true;
+    final isConnected = widget.state.isSessionReady;
 
     return Container(
       width: double.infinity,
@@ -311,7 +311,7 @@ class _SpeedTestTabState extends State<SpeedTestTab>
   }
 
   Widget _buildSpeedTestControls(BuildContext context) {
-    final isConnected = widget.state.connectionInfo?.isConnected == true;
+    final isConnected = widget.state.isSessionReady;
     final isTestRunning = _isTestRunning || widget.state.isSpeedTesting;
 
     return Card(

@@ -1,0 +1,49 @@
+package com.example.wifi_direct_cable.session
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SessionStateMachineTest {
+    @Test
+    fun happyPathTransitionsToReady() {
+        val stateMachine = SessionStateMachine()
+
+        stateMachine.transitionTo(SessionPhase.WIFI_DIRECT_CONNECTED)
+        stateMachine.transitionTo(SessionPhase.CONNECTING_TRANSPORT)
+        stateMachine.transitionTo(SessionPhase.HANDSHAKING)
+        stateMachine.transitionTo(SessionPhase.READY)
+
+        assertEquals(SessionPhase.READY, stateMachine.phase)
+    }
+
+    @Test
+    fun disconnectFromReadyIsAllowed() {
+        val stateMachine = SessionStateMachine()
+        stateMachine.transitionTo(SessionPhase.WIFI_DIRECT_CONNECTED)
+        stateMachine.transitionTo(SessionPhase.CONNECTING_TRANSPORT)
+        stateMachine.transitionTo(SessionPhase.HANDSHAKING)
+        stateMachine.transitionTo(SessionPhase.READY)
+
+        stateMachine.transitionTo(SessionPhase.DISCONNECTING)
+        stateMachine.transitionTo(SessionPhase.DISCONNECTED)
+
+        assertEquals(SessionPhase.DISCONNECTED, stateMachine.phase)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun cannotSkipTransportAndHandshake() {
+        SessionStateMachine().transitionTo(SessionPhase.READY)
+    }
+
+    @Test
+    fun failedSessionCanStartOver() {
+        val stateMachine = SessionStateMachine()
+        stateMachine.transitionTo(SessionPhase.WIFI_DIRECT_CONNECTED)
+        stateMachine.transitionTo(SessionPhase.FAILED)
+
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.WIFI_DIRECT_CONNECTED))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.READY))
+    }
+}

@@ -60,7 +60,7 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   Widget _buildConnectionBanner(BuildContext context) {
-    final isConnected = widget.state.connectionInfo?.isConnected == true;
+    final isConnected = widget.state.isSessionReady;
 
     return Container(
       width: double.infinity,
@@ -260,7 +260,7 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   Widget _buildMessageInput(BuildContext context) {
-    final isConnected = widget.state.connectionInfo?.isConnected == true;
+    final isConnected = widget.state.isSessionReady;
 
     return Container(
       padding: const EdgeInsets.all(16),

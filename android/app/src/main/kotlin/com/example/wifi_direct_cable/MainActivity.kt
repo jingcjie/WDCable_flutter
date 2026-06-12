@@ -8,6 +8,7 @@ import android.net.wifi.p2p.WifiP2pDeviceList
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Bundle
+import com.example.wifi_direct_cable.session.SessionManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,7 +18,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     
     private lateinit var methodChannel: MethodChannel
     private lateinit var wifiDirectManager: WiFiDirectManager
-    private lateinit var socketManager: SocketConnectionManager
+    private lateinit var sessionManager: SessionManager
     private lateinit var chatService: ChatService
     private lateinit var speedTestService: SpeedTestService
     private lateinit var fileTransferService: FileTransferService
@@ -45,20 +46,19 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         
         // Initialize services with methodChannel
         permissionManager = PermissionManager(this, methodChannel)
-        socketManager = SocketConnectionManager(methodChannel, this)
+        sessionManager = SessionManager(this, methodChannel)
         wifiDirectManager = WiFiDirectManager(this, methodChannel)
         wifiDirectManager.initialize(this)
         
-        // Get service references from SocketConnectionManager
-        chatService = socketManager.getChatService()
-        speedTestService = socketManager.getSpeedTestService()
-        fileTransferService = socketManager.getFileTransferService()
+        chatService = ChatService(sessionManager, methodChannel)
+        speedTestService = SpeedTestService(sessionManager, methodChannel)
+        fileTransferService = FileTransferService(this, sessionManager, methodChannel)
         
         methodChannelHandler = FlutterMethodChannelHandler(
             this,
             methodChannel,
             wifiDirectManager,
-            socketManager,
+            sessionManager,
             chatService,
             speedTestService,
             fileTransferService,
@@ -115,8 +115,8 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
 
     override fun onDestroy() {
         unregisterWifiDirectReceiver()
-        if (::socketManager.isInitialized) {
-            socketManager.cleanup()
+        if (::sessionManager.isInitialized) {
+            sessionManager.cleanup()
         }
         if (::wifiDirectManager.isInitialized) {
             wifiDirectManager.channel?.close()
@@ -137,7 +137,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     
     // WiFiDirectManager.ConnectionListener implementation
     override fun onConnectionInfoAvailable(info: WifiP2pInfo) {
-        socketManager.updateConnectionInfo(info.groupFormed, info.isGroupOwner, info.groupOwnerAddress?.hostAddress)
+        sessionManager.updateConnectionInfo(info.groupFormed, info.isGroupOwner, info.groupOwnerAddress?.hostAddress)
         
         val connectionInfo = mapOf(
             "isConnected" to info.groupFormed,
@@ -145,10 +145,6 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
             "groupOwnerAddress" to (info.groupOwnerAddress?.hostAddress ?: "")
         )
         methodChannel.invokeMethod("onConnectionChanged", connectionInfo)
-        
-        if (info.groupFormed) {
-            socketManager.startServers()
-        }
     }
     
     override fun onPeersAvailable(peers: WifiP2pDeviceList) {

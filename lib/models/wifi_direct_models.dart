@@ -263,6 +263,10 @@ class WiFiDirectState {
   final bool isServerStarted;
   final List<WiFiDirectDevice> peers;
   final WiFiDirectConnectionInfo? connectionInfo;
+  final String sessionState;
+  final String? sessionId;
+  final String? sessionRole;
+  final String? disconnectReason;
   final List<String> logs;
   final List<ChatMessage> chatMessages;
   final SpeedTestResult? lastSpeedTest;
@@ -279,6 +283,10 @@ class WiFiDirectState {
     this.isServerStarted = false,
     this.peers = const [],
     this.connectionInfo,
+    this.sessionState = 'Disconnected',
+    this.sessionId,
+    this.sessionRole,
+    this.disconnectReason,
     this.logs = const [],
     this.chatMessages = const [],
     this.lastSpeedTest,
@@ -296,6 +304,10 @@ class WiFiDirectState {
     bool? isServerStarted,
     List<WiFiDirectDevice>? peers,
     Object? connectionInfo = _unset,
+    String? sessionState,
+    Object? sessionId = _unset,
+    Object? sessionRole = _unset,
+    Object? disconnectReason = _unset,
     List<String>? logs,
     List<ChatMessage>? chatMessages,
     Object? lastSpeedTest = _unset,
@@ -316,6 +328,16 @@ class WiFiDirectState {
       connectionInfo: identical(connectionInfo, _unset)
           ? this.connectionInfo
           : connectionInfo as WiFiDirectConnectionInfo?,
+      sessionState: sessionState ?? this.sessionState,
+      sessionId: identical(sessionId, _unset)
+          ? this.sessionId
+          : sessionId as String?,
+      sessionRole: identical(sessionRole, _unset)
+          ? this.sessionRole
+          : sessionRole as String?,
+      disconnectReason: identical(disconnectReason, _unset)
+          ? this.disconnectReason
+          : disconnectReason as String?,
       logs: logs ?? this.logs,
       chatMessages: chatMessages ?? this.chatMessages,
       lastSpeedTest: identical(lastSpeedTest, _unset)
@@ -329,4 +351,8 @@ class WiFiDirectState {
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
     );
   }
+
+  bool get hasWifiDirectLink => connectionInfo?.isConnected == true;
+
+  bool get isSessionReady => sessionState == 'Ready';
 }
