@@ -163,7 +163,6 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildMessageBubble(BuildContext context, ChatMessage message) {
     final isOutgoing = message.isSent;
-    final isSpeedTest = message.content.startsWith('SPEED_TEST_');
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -187,43 +186,18 @@ class _ChatTabState extends State<ChatTab> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isSpeedTest
-                    ? Colors.purple.withValues(alpha: 0.1)
-                    : isOutgoing
+                color: isOutgoing
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(16),
-                border: isSpeedTest
-                    ? Border.all(color: Colors.purple.withValues(alpha: 0.3))
-                    : null,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isSpeedTest) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.speed, size: 14, color: Colors.purple[700]),
-                        const SizedBox(width: 4),
-                        Text(
-                          AppLocalizations.of(context)!.speedTest,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.purple[700],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                  ],
                   Text(
                     _formatMessageContent(message.content),
                     style: TextStyle(
-                      color: isSpeedTest
-                          ? Colors.purple[700]
-                          : isOutgoing
+                      color: isOutgoing
                           ? Colors.white
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 14,
@@ -233,9 +207,7 @@ class _ChatTabState extends State<ChatTab> {
                   Text(
                     _formatTimestamp(message.timestamp),
                     style: TextStyle(
-                      color: isSpeedTest
-                          ? Colors.purple[500]
-                          : isOutgoing
+                      color: isOutgoing
                           ? Colors.white.withValues(alpha: 0.7)
                           : Theme.of(context).colorScheme.onSurfaceVariant
                                 .withValues(alpha: 0.7),

@@ -14,15 +14,7 @@ The Wi-Fi Direct layer is already well tested and should be kept unless a specif
 - `WiFiDirectManager.kt` handles Android Wi-Fi P2P discovery/connect/disconnect.
 - `WiFiDirectBroadcastReceiver.kt` forwards Android P2P broadcasts.
 
-The legacy part that was replaced is everything after Wi-Fi Direct creates the network link:
-
-- `SocketConnectionManager.kt` owned three raw TCP channels and has been removed from the live path.
-- Chat uses port `8888`.
-- Speed test uses port `8889`.
-- File transfer uses port `8890`.
-- `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt` used to parse and write ad hoc string headers directly on sockets.
-
-That raw socket feature design was the source of fragility and future upgrade cost. The upgraded Android path now uses the session runtime. Do not support the previous wire protocol and do not restore duplicate feature socket paths.
+The retired post-link design has been removed from the live path. The upgraded Android path now uses the session runtime for chat, file transfer, speed test, diagnostics, handshake, heartbeat, and teardown. Do not support previous wire formats and do not restore duplicate feature socket paths.
 
 ## Completed / Historical Work
 
@@ -33,7 +25,7 @@ That raw socket feature design was the source of fragility and future upgrade co
 - Android diagnostics/export work from F-F is implemented enough for Android-to-Android validation.
 - Android-to-Android full flow has been manually tested and is generally good. Minor bugs remain for follow-up tuning.
 - Android-to-Windows has not been manually tested yet.
-- Streaming is dropped from this phase. Do not implement audio/video/screen streaming, microphone capture, playback, jitter buffers, or streaming UI. Existing `realtime` scaffolding is reserved/no-op compatibility only until the protocol is cleaned up.
+- Streaming is dropped from this phase. Do not implement media streaming, microphone capture, playback, jitter buffers, streaming UI, media channels, or media capabilities.
 
 ## Target Architecture
 
@@ -49,13 +41,12 @@ Target channels:
 
 - `control`: reliable small messages such as handshake, heartbeat, close, error, chat, command, ack, and feature control messages.
 - `bulk`: reliable large ordered payloads such as file transfer, speed-test payloads, and diagnostics export.
-- `realtime`: reserved/no-op only if needed for compatibility with current protocol scaffolding. Do not send feature traffic on it in this phase.
 
 Streaming scope:
 
 - No streaming implementation work is scheduled.
 - Do not add microphone capture, audio playback, codecs, sender pacing, jitter buffers, or streaming controls.
-- A no-op `realtime` transport is allowed only if required for compatibility with existing Android protocol scaffolding.
+- Do not add media transport or media capability scaffolding.
 
 ## Important Source Map
 
@@ -90,7 +81,7 @@ Android/Kotlin:
 - If `../PROTOCOL.md` exists, follow it. If it does not exist and F-A is the current task, create it.
 - Do not add feature-level socket reads/writes. All app features should call the session API.
 - Do not support previous builds at the protocol layer. When a feature is migrated, delete or disconnect its old socket path.
-- Do not implement streaming features in Android. Any `realtime` channel work is no-op compatibility only unless a later product decision explicitly reopens streaming.
+- Do not implement streaming features in Android.
 
 ## Standard Verification Commands
 
@@ -136,7 +127,7 @@ No manual device test required.
 
 Codex work:
 
-- [x] Read the current protocol in `SocketConnectionManager.kt`, `ChatService.kt`, `SpeedTestService.kt`, and `FileTransferService.kt`.
+- [x] Read the retired post-link transport, chat, speed, and file implementations.
 - [x] Create or update shared `../PROTOCOL.md` if missing.
 - [x] Define Android constants matching the shared spec:
   - magic
@@ -189,7 +180,7 @@ Codex work:
   - current session id
   - peer info
   - role
-  - control/bulk sockets or channels, plus reserved/no-op realtime scaffolding
+  - control/bulk sockets or channels
   - accept/connect retries
   - handshake
   - heartbeat
@@ -217,7 +208,7 @@ Codex work:
 - [x] Make cleanup idempotent.
 - [x] Ensure all long-running reads/writes stop during disconnect, app destroy, or session replacement.
 - [x] Add MethodChannel events for session state, session ready, session failed, peer not running app, and disconnect reason.
-- [x] Start replacing `SocketConnectionManager` responsibilities with the session manager. Do not leave duplicate raw socket lifecycle owners.
+- [x] Move post-link transport responsibilities to the session manager. Do not leave duplicate lifecycle owners.
 - [x] Add focused tests for state transitions where practical.
 - [x] Run `flutter analyze`.
 - [x] Run `flutter test`.
@@ -293,8 +284,8 @@ Codex work:
   - cancel
   - failure result
   - no concurrent tests on the same session unless explicitly supported
-- [x] Remove delimiter-sensitive `FILE:name:size` parsing from the live path.
-- [x] Remove `SPEED_TEST_*` string headers from the live path.
+- [x] Remove delimiter-sensitive file header parsing from the live path.
+- [x] Remove speed-test string headers from the live path.
 - [x] Update Flutter transfer/speed states from protocol progress events.
 - [x] Run `flutter analyze`.
 - [x] Run `flutter test`.
@@ -329,7 +320,6 @@ Codex work:
   - protocol
   - control
   - bulk
-  - reserved realtime/no-op transport
   - chat
   - file
   - speed

@@ -11,11 +11,9 @@ object ProtocolConstants {
 
     const val DEFAULT_CONTROL_PORT = 8988
     const val DEFAULT_BULK_PORT = 8989
-    const val DEFAULT_REALTIME_PORT = 8990
 
     const val CAPABILITY_CHAT = "control.chat"
     const val CAPABILITY_BULK_FILE = "bulk.file"
     const val CAPABILITY_BULK_SPEED = "bulk.speed"
-    const val CAPABILITY_REALTIME_AUDIO_PCM16 = "realtime.audio.pcm16"
     const val CAPABILITY_DIAGNOSTICS_EXPORT = "diagnostics.export"
 }

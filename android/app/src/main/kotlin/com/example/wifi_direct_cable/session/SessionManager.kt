@@ -205,8 +205,7 @@ class SessionManager(
             "isReady" to (phase == SessionPhase.READY),
             "disconnectReason" to (lastDisconnectReason ?: ""),
             "controlChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.CONTROL) == true),
-            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true),
-            "realtimeChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.REALTIME) == true)
+            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true)
         )
     }
 
@@ -437,13 +436,6 @@ class SessionManager(
                     "Channel opened",
                     mapOf("channel" to channel.protocolName, "port" to port, "role" to role.eventName)
                 )
-                if (channel == ProtocolChannel.REALTIME) {
-                    DiagnosticsLogger.log(
-                        "realtime",
-                        "Realtime channel opened; audio streaming is not implemented until F-E",
-                        mapOf("port" to port)
-                    )
-                }
             }
             return transports
         } catch (exception: Exception) {
@@ -576,7 +568,6 @@ class SessionManager(
             .put(ProtocolConstants.CAPABILITY_CHAT)
             .put(ProtocolConstants.CAPABILITY_BULK_FILE)
             .put(ProtocolConstants.CAPABILITY_BULK_SPEED)
-            .put(ProtocolConstants.CAPABILITY_REALTIME_AUDIO_PCM16)
             .put(ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT)
     }
 
@@ -1419,7 +1410,6 @@ class SessionManager(
                     ProtocolConstants.CAPABILITY_CHAT,
                     ProtocolConstants.CAPABILITY_BULK_FILE,
                     ProtocolConstants.CAPABILITY_BULK_SPEED,
-                    ProtocolConstants.CAPABILITY_REALTIME_AUDIO_PCM16,
                     ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT
                 )
             )
@@ -1501,8 +1491,7 @@ class SessionManager(
     private fun channelPorts(): List<Pair<ProtocolChannel, Int>> {
         return listOf(
             ProtocolChannel.CONTROL to ProtocolConstants.DEFAULT_CONTROL_PORT,
-            ProtocolChannel.BULK to ProtocolConstants.DEFAULT_BULK_PORT,
-            ProtocolChannel.REALTIME to ProtocolConstants.DEFAULT_REALTIME_PORT
+            ProtocolChannel.BULK to ProtocolConstants.DEFAULT_BULK_PORT
         )
     }
 

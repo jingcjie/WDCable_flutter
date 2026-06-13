@@ -29,7 +29,7 @@ A separate version for Windows is also available, providing the same powerful fe
 *   **Direct Device-to-Device Connection**: No need for any intermediary network infrastructure.
 *   **High-Speed File Transfer**: Transfer large files in a fraction of the time.
 *   **Real-time Messaging**: Chat with another connected device.
-*   **Data Streaming**: Send streams of data between devices.
+*   **Session-Based Transfer**: Chat, files, and speed tests share one negotiated app session.
 *   **Cross-Platform**: Works on Android, with a separate client for Windows.
 *   **Network Speed Test**: Check the transfer speed of your connection.
 
@@ -92,4 +92,3 @@ Use this checklist before coordinated Windows validation:
 - Failure: close the peer app during file transfer, turn Wi-Fi off during speed test, then reconnect.
 - Missing peer app: connect to a Wi-Fi Direct peer without the upgraded WDCable protocol and confirm a clear protocol-missing failure.
 - Diagnostics: use the copy icon in the Connection tab logs header after one success and one failure, then save the copied text with the test report.
-- Current limitation: realtime audio streaming is not implemented until F-E, so F-F audio-streaming release checks remain blocked.
