@@ -185,6 +185,7 @@ class FlutterMethodChannelHandler(
     private fun getDeviceSettings(result: MethodChannel.Result) {
         val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val stats = sessionManager.getConnectionStats()
+        val runtimeDiagnostics = WdCableRuntime.diagnostics()
         val isConnected = stats["isConnected"] as? Boolean ?: false
         val settings = mapOf(
             "wifiEnabled" to wifiManager.isWifiEnabled,
@@ -207,6 +208,11 @@ class FlutterMethodChannelHandler(
             "nearbyWifiDevicesPermissionGranted" to permissionManager.hasNearbyWifiDevicesPermission(),
             "recordAudioPermissionGranted" to permissionManager.hasRecordAudioPermission(),
             "storageAccessMode" to "system_picker",
+            "foregroundServiceRunning" to (runtimeDiagnostics["foregroundServiceRunning"] ?: false),
+            "wifiLockHeld" to (runtimeDiagnostics["wifiLockHeld"] ?: false),
+            "wakeLockHeld" to (runtimeDiagnostics["wakeLockHeld"] ?: false),
+            "receiverOwner" to (runtimeDiagnostics["receiverOwner"] ?: "none"),
+            "lastRecoveryReason" to (runtimeDiagnostics["lastRecoveryReason"] ?: ""),
             "timestamp" to System.currentTimeMillis()
         )
         result.success(settings)

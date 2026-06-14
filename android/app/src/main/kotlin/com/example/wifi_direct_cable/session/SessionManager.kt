@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import com.example.wifi_direct_cable.WdCableRuntime
 import com.example.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.example.wifi_direct_cable.protocol.ProtocolChannel
 import com.example.wifi_direct_cable.protocol.ProtocolConstants
@@ -110,6 +111,10 @@ class SessionManager(
     private var lastDisconnectReason: String? = null
 
     @Volatile
+    var lastRecoveryReason: String? = null
+        private set
+
+    @Volatile
     private var heartbeatFuture: ScheduledFuture<*>? = null
 
     fun updateConnectionInfo(groupFormed: Boolean, isGroupOwner: Boolean, ownerAddress: String?) {
@@ -156,6 +161,7 @@ class SessionManager(
         currentRole = role
         groupOwnerAddress = normalizedOwnerAddress
         lastDisconnectReason = null
+        lastRecoveryReason = null
 
         emitState(SessionPhase.WIFI_DIRECT_CONNECTED, sessionId, role)
         DiagnosticsLogger.log(
@@ -186,6 +192,7 @@ class SessionManager(
         emitDisconnectReason(reason, sessionId)
         cleanupIncomingBulkStreams(deletePartialFiles = true)
         speedTestActive.set(false)
+        WdCableRuntime.stopConnectionService(context)
         DiagnosticsLogger.log(
             "session",
             "Disconnected",
@@ -223,10 +230,20 @@ class SessionManager(
             "sessionId" to (currentSessionId ?: ""),
             "isReady" to (phase == SessionPhase.READY),
             "disconnectReason" to (lastDisconnectReason ?: ""),
+            "lastRecoveryReason" to (lastRecoveryReason ?: ""),
             "controlChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.CONTROL) == true),
             "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true),
             "audioChannelOpen" to (audioTransport != null)
         )
+    }
+
+    fun replayCurrentState() {
+        val phase = stateMachine.phase
+        emitState(phase, currentSessionId, currentRole, lastDisconnectReason)
+        val activeRuntime = runtime
+        if (phase == SessionPhase.READY && activeRuntime != null) {
+            emitSessionReady(activeRuntime)
+        }
     }
 
     fun getAudioSessionInfo(): AudioSessionInfo? {
@@ -583,6 +600,7 @@ class SessionManager(
                 "Session ready",
                 mapOf("sessionId" to sessionId, "role" to role.eventName)
             )
+            WdCableRuntime.startConnectionService(context)
         } catch (exception: PeerProtocolMissingException) {
             closeTransports(openedTransports.values)
             failSession(expectedGeneration, sessionId, role, "peer_protocol_missing", exception, true)
@@ -794,14 +812,7 @@ class SessionManager(
                     handleControlFrame(activeRuntime, frame)
                 } catch (exception: Exception) {
                     if (isCurrent(activeRuntime.generation) && stateMachine.phase == SessionPhase.READY) {
-                        failSession(
-                            activeRuntime.generation,
-                            activeRuntime.sessionId,
-                            activeRuntime.role,
-                            "control_channel_failed",
-                            exception,
-                            false
-                        )
+                        degradeReadySession(activeRuntime, "control_channel_failed", exception)
                     }
                     return@execute
                 }
@@ -818,14 +829,7 @@ class SessionManager(
                     handleBulkFrame(activeRuntime, frame)
                 } catch (exception: Exception) {
                     if (isCurrent(activeRuntime.generation) && stateMachine.phase == SessionPhase.READY) {
-                        failSession(
-                            activeRuntime.generation,
-                            activeRuntime.sessionId,
-                            activeRuntime.role,
-                            "bulk_channel_failed",
-                            exception,
-                            false
-                        )
+                        degradeReadySession(activeRuntime, "bulk_channel_failed", exception)
                     }
                     return@execute
                 }
@@ -1189,13 +1193,10 @@ class SessionManager(
 
             val ageMs = System.currentTimeMillis() - activeRuntime.lastFrameReceivedAt.get()
             if (ageMs > HEARTBEAT_TIMEOUT_MS) {
-                failSession(
-                    activeRuntime.generation,
-                    activeRuntime.sessionId,
-                    activeRuntime.role,
+                degradeReadySession(
+                    activeRuntime,
                     "heartbeat_timeout",
-                    IOException("No control frames received for ${ageMs}ms"),
-                    false
+                    IOException("No control frames received for ${ageMs}ms")
                 )
                 return@scheduleAtFixedRate
             }
@@ -1211,14 +1212,7 @@ class SessionManager(
                     )
                 )
             } catch (exception: Exception) {
-                failSession(
-                    activeRuntime.generation,
-                    activeRuntime.sessionId,
-                    activeRuntime.role,
-                    "heartbeat_send_failed",
-                    exception,
-                    false
-                )
+                degradeReadySession(activeRuntime, "heartbeat_send_failed", exception)
             }
         }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
@@ -1593,13 +1587,25 @@ class SessionManager(
         return role == SessionRole.GROUP_OWNER || groupOwnerAddress == ownerAddress
     }
 
+    private fun isSameWifiDirectGroupInfo(
+        info: android.net.wifi.p2p.WifiP2pInfo?,
+        role: SessionRole,
+        ownerAddress: String?
+    ): Boolean {
+        if (info?.groupFormed != true) return false
+        val currentInfoRole = if (info.isGroupOwner) SessionRole.GROUP_OWNER else SessionRole.CLIENT
+        if (currentInfoRole != role) return false
+        if (role == SessionRole.GROUP_OWNER) return true
+        return info.groupOwnerAddress?.hostAddress == ownerAddress
+    }
+
     private fun SessionPhase.keepsActiveSession(): Boolean {
         return when (this) {
             SessionPhase.WIFI_DIRECT_CONNECTED,
             SessionPhase.CONNECTING_TRANSPORT,
             SessionPhase.HANDSHAKING,
-            SessionPhase.READY -> true
-            SessionPhase.DEGRADED,
+            SessionPhase.READY,
+            SessionPhase.DEGRADED -> true
             SessionPhase.DISCONNECTING,
             SessionPhase.DISCONNECTED,
             SessionPhase.FAILED -> false
@@ -1616,6 +1622,147 @@ class SessionManager(
             "onSessionFailed",
             mapOf("reason" to reason, "message" to message, "sessionId" to (currentSessionId ?: ""))
         )
+    }
+
+    private fun degradeReadySession(activeRuntime: Runtime, reason: String, exception: Exception) {
+        if (!generation.compareAndSet(activeRuntime.generation, activeRuntime.generation + 1)) return
+
+        val recoveryGeneration = activeRuntime.generation + 1
+        lastDisconnectReason = reason
+        lastRecoveryReason = reason
+        DiagnosticsLogger.log(
+            "session",
+            "Session degraded",
+            mapOf(
+                "sessionId" to activeRuntime.sessionId,
+                "role" to activeRuntime.role.eventName,
+                "reason" to reason,
+                "errorType" to exception.javaClass.simpleName,
+                "error" to exception.message
+            )
+        )
+
+        stopHeartbeat()
+        audioHandler?.onSessionEnded(reason)
+        closeAudioTransport()
+        cleanupIncomingBulkStreams(deletePartialFiles = true)
+        speedTestActive.set(false)
+        closeRuntimeOnly()
+        transportAdapter.cancel()
+        runtime = null
+        emitState(SessionPhase.DEGRADED, activeRuntime.sessionId, activeRuntime.role, reason)
+        confirmGroupThenRecoverTransport(
+            recoveryGeneration,
+            activeRuntime.sessionId,
+            activeRuntime.role,
+            activeRuntime.peerAddress,
+            reason
+        )
+    }
+
+    private fun confirmGroupThenRecoverTransport(
+        recoveryGeneration: Int,
+        sessionId: String,
+        role: SessionRole,
+        ownerAddress: String?,
+        degradedReason: String
+    ) {
+        setupExecutor.execute {
+            try {
+                Thread.sleep(DEGRADED_GROUP_CONFIRM_DELAY_MS)
+            } catch (_: InterruptedException) {
+                return@execute
+            }
+
+            if (!isCurrent(recoveryGeneration) || stateMachine.phase != SessionPhase.DEGRADED) return@execute
+
+            WdCableRuntime.requestConnectionInfoOnce(
+                reason = "degraded_group_confirm:$degradedReason",
+                dispatchToListener = false
+            ) { info ->
+                setupExecutor.execute {
+                    if (!isCurrent(recoveryGeneration) || stateMachine.phase != SessionPhase.DEGRADED) return@execute
+
+                    if (!isSameWifiDirectGroupInfo(info, role, ownerAddress)) {
+                        lastRecoveryReason = "wifi_direct_group_lost_after_$degradedReason"
+                        DiagnosticsLogger.log(
+                            "session",
+                            "Wi-Fi Direct group lost during degraded recovery",
+                            mapOf(
+                                "sessionId" to sessionId,
+                                "reason" to degradedReason,
+                                "groupFormed" to (info?.groupFormed ?: false),
+                                "isGroupOwner" to (info?.isGroupOwner ?: false),
+                                "groupOwnerAddress" to (info?.groupOwnerAddress?.hostAddress ?: "")
+                            )
+                        )
+                        disconnect("wifi_direct_group_lost")
+                        return@execute
+                    }
+
+                    rebuildTransportAfterDegraded(recoveryGeneration, sessionId, role, ownerAddress, degradedReason)
+                }
+            }
+        }
+    }
+
+    private fun rebuildTransportAfterDegraded(
+        recoveryGeneration: Int,
+        sessionId: String,
+        role: SessionRole,
+        ownerAddress: String?,
+        degradedReason: String
+    ) {
+        val openedTransports = linkedMapOf<ProtocolChannel, SessionTransport>()
+        try {
+            if (!isCurrent(recoveryGeneration) || stateMachine.phase != SessionPhase.DEGRADED) return
+
+            DiagnosticsLogger.log(
+                "session",
+                "Rebuilding WDCable transport after degraded state",
+                mapOf("sessionId" to sessionId, "role" to role.eventName, "reason" to degradedReason)
+            )
+            openedTransports.putAll(openTransports(role, ownerAddress, recoveryGeneration))
+            if (!isCurrent(recoveryGeneration) || stateMachine.phase != SessionPhase.DEGRADED) {
+                closeTransports(openedTransports.values)
+                return
+            }
+
+            val newRuntime = Runtime(
+                generation = recoveryGeneration,
+                sessionId = sessionId,
+                role = role,
+                peerAddress = ownerAddress,
+                transports = openedTransports.toMap()
+            )
+
+            performHandshake(newRuntime)
+            newRuntime.transports.values.forEach { it.setReadTimeout(0) }
+
+            if (!isCurrent(recoveryGeneration) || stateMachine.phase != SessionPhase.DEGRADED) {
+                closeTransports(newRuntime.transports.values)
+                return
+            }
+
+            runtime = newRuntime
+            lastDisconnectReason = null
+            lastRecoveryReason = "recovered_after_$degradedReason"
+            emitState(SessionPhase.READY, sessionId, role)
+            emitSessionReady(newRuntime)
+            startControlReadLoop(newRuntime)
+            startBulkReadLoop(newRuntime)
+            startHeartbeat(newRuntime)
+            WdCableRuntime.startConnectionService(context)
+            DiagnosticsLogger.log(
+                "session",
+                "WDCable transport recovered",
+                mapOf("sessionId" to sessionId, "role" to role.eventName, "reason" to degradedReason)
+            )
+        } catch (exception: Exception) {
+            closeTransports(openedTransports.values)
+            lastRecoveryReason = "transport_recovery_failed_after_$degradedReason"
+            failSession(recoveryGeneration, sessionId, role, "transport_recovery_failed", exception, false)
+        }
     }
 
     private fun failSession(
@@ -1649,6 +1796,7 @@ class SessionManager(
         transportAdapter.cancel()
         runtime = null
         emitState(SessionPhase.FAILED, sessionId, role, reason)
+        WdCableRuntime.stopConnectionService(context)
 
         if (peerProtocolMissing) {
             methodChannel.invokeOnMain(
@@ -1799,6 +1947,7 @@ class SessionManager(
         private const val HANDSHAKE_TIMEOUT_MS = 10000
         private const val HEARTBEAT_INTERVAL_MS = 5000L
         private const val HEARTBEAT_TIMEOUT_MS = 15000L
+        private const val DEGRADED_GROUP_CONFIRM_DELAY_MS = 1000L
         private const val BULK_CHUNK_SIZE = 64 * 1024
     }
 }

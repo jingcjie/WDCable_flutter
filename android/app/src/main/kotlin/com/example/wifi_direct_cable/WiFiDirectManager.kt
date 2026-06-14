@@ -17,6 +17,7 @@ class WiFiDirectManager(
     lateinit var wifiP2pManager: WifiP2pManager
     var channel: WifiP2pManager.Channel? = null
     private var latestPeersCount = 0
+    private var latestConnectionInfo: Map<String, Any>? = null
     val discoveredDevicesCount: Int
         get() = latestPeersCount
     
@@ -163,9 +164,62 @@ class WiFiDirectManager(
             }
         })
     }
+
+    fun requestConnectionInfoOnce(
+        reason: String,
+        dispatchToListener: Boolean,
+        callback: ((WifiP2pInfo?) -> Unit)? = null
+    ) {
+        val missingCapabilities = missingWifiDirectCapabilities()
+        if (missingCapabilities.isNotEmpty()) {
+            notifyPermissionDenied(missingCapabilities)
+            DiagnosticsLogger.log(
+                "wifi",
+                "One-shot connection info skipped because permissions are missing",
+                mapOf("reason" to reason, "capabilities" to missingCapabilities.joinToString(","))
+            )
+            callback?.invoke(null)
+            return
+        }
+
+        try {
+            wifiP2pManager.requestConnectionInfo(channel) { info ->
+                DiagnosticsLogger.log(
+                    "wifi",
+                    "One-shot connection info received",
+                    mapOf(
+                        "reason" to reason,
+                        "groupFormed" to info.groupFormed,
+                        "isGroupOwner" to info.isGroupOwner,
+                        "groupOwnerAddress" to (info.groupOwnerAddress?.hostAddress ?: "")
+                    )
+                )
+                if (dispatchToListener) {
+                    handleConnectionInfoAvailable(info)
+                } else {
+                    latestConnectionInfo = connectionInfoMap(info)
+                }
+                callback?.invoke(info)
+            }
+        } catch (exception: Exception) {
+            DiagnosticsLogger.log(
+                "wifi",
+                "One-shot connection info failed",
+                mapOf("reason" to reason, "error" to exception.message)
+            )
+            callback?.invoke(null)
+        }
+    }
+
+    fun replayLatestConnectionInfo() {
+        latestConnectionInfo?.let { connectionInfo ->
+            methodChannel.invokeMethod("onConnectionChanged", connectionInfo)
+        }
+    }
     
     // Called from broadcast receiver
     fun handleConnectionInfoAvailable(info: WifiP2pInfo) {
+        latestConnectionInfo = connectionInfoMap(info)
         connectionListener?.onConnectionInfoAvailable(info)
     }
     
@@ -179,6 +233,17 @@ class WiFiDirectManager(
     // Called from broadcast receiver
     fun handleWifiP2pStateChanged(enabled: Boolean) {
         DiagnosticsLogger.log("wifi", "Wi-Fi P2P state changed", mapOf("enabled" to enabled))
+        if (!enabled) {
+            WdCableRuntime.handleWifiP2pStateChanged(enabled)
+        }
         connectionListener?.onWifiP2pStateChanged(enabled)
+    }
+
+    private fun connectionInfoMap(info: WifiP2pInfo): Map<String, Any> {
+        return mapOf(
+            "isConnected" to info.groupFormed,
+            "isGroupOwner" to info.isGroupOwner,
+            "groupOwnerAddress" to (info.groupOwnerAddress?.hostAddress ?: "")
+        )
     }
 }

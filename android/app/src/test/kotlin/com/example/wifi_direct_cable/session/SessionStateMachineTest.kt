@@ -46,4 +46,39 @@ class SessionStateMachineTest {
         assertTrue(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.WIFI_DIRECT_CONNECTED))
         assertFalse(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.READY))
     }
+
+    @Test
+    fun readyCanDegradeAndRecoverToReady() {
+        val stateMachine = SessionStateMachine()
+        stateMachine.transitionTo(SessionPhase.WIFI_DIRECT_CONNECTED)
+        stateMachine.transitionTo(SessionPhase.CONNECTING_TRANSPORT)
+        stateMachine.transitionTo(SessionPhase.HANDSHAKING)
+        stateMachine.transitionTo(SessionPhase.READY)
+
+        stateMachine.transitionTo(SessionPhase.DEGRADED)
+        stateMachine.transitionTo(SessionPhase.READY)
+
+        assertEquals(SessionPhase.READY, stateMachine.phase)
+    }
+
+    @Test
+    fun readyCanDegradeAndDisconnectWhenGroupIsGone() {
+        val stateMachine = SessionStateMachine()
+        stateMachine.transitionTo(SessionPhase.WIFI_DIRECT_CONNECTED)
+        stateMachine.transitionTo(SessionPhase.CONNECTING_TRANSPORT)
+        stateMachine.transitionTo(SessionPhase.HANDSHAKING)
+        stateMachine.transitionTo(SessionPhase.READY)
+
+        stateMachine.transitionTo(SessionPhase.DEGRADED)
+        stateMachine.transitionTo(SessionPhase.DISCONNECTED)
+
+        assertEquals(SessionPhase.DISCONNECTED, stateMachine.phase)
+    }
+
+    @Test
+    fun transportFailureBeforeReadyDoesNotEnterDegraded() {
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.WIFI_DIRECT_CONNECTED, SessionPhase.DEGRADED))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.CONNECTING_TRANSPORT, SessionPhase.DEGRADED))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.CONNECTING_TRANSPORT, SessionPhase.FAILED))
+    }
 }

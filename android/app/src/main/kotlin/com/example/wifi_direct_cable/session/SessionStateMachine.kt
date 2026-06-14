@@ -32,7 +32,6 @@ class SessionStateMachine(initialPhase: SessionPhase = SessionPhase.DISCONNECTED
                     to == SessionPhase.DISCONNECTING ||
                     to == SessionPhase.FAILED
                 SessionPhase.CONNECTING_TRANSPORT -> to == SessionPhase.HANDSHAKING ||
-                    to == SessionPhase.DEGRADED ||
                     to == SessionPhase.DISCONNECTING ||
                     to == SessionPhase.FAILED
                 SessionPhase.HANDSHAKING -> to == SessionPhase.READY ||

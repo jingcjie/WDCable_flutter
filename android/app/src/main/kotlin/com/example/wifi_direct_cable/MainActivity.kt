@@ -1,12 +1,8 @@
 package com.example.wifi_direct_cable
 
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pDeviceList
-import android.net.wifi.p2p.WifiP2pManager
-import android.os.Build
 import android.os.Bundle
 import com.example.wifi_direct_cable.audio.AudioService
 import com.example.wifi_direct_cable.session.SessionManager
@@ -27,18 +23,8 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     private lateinit var permissionManager: PermissionManager
     private lateinit var methodChannelHandler: FlutterMethodChannelHandler
     
-    private var receiver: WiFiDirectBroadcastReceiver? = null
-    private var isReceiverRegistered = false
-    private val intentFilter = IntentFilter()
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Set up intent filter
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
     }
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -51,6 +37,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         sessionManager = SessionManager(this, methodChannel)
         wifiDirectManager = WiFiDirectManager(this, methodChannel)
         wifiDirectManager.initialize(this)
+        WdCableRuntime.configure(this, methodChannel, wifiDirectManager, sessionManager)
         
         chatService = ChatService(sessionManager, methodChannel)
         speedTestService = SpeedTestService(sessionManager, methodChannel)
@@ -78,47 +65,17 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     // Lifecycle methods
     override fun onResume() {
         super.onResume()
-        registerWifiDirectReceiver()
+        WdCableRuntime.registerReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
+        WdCableRuntime.replayCurrentStateToFlutter()
     }
 
     override fun onPause() {
-        unregisterWifiDirectReceiver()
+        WdCableRuntime.unregisterReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
         super.onPause()
     }
 
-    private fun registerWifiDirectReceiver() {
-        if (!::wifiDirectManager.isInitialized || isReceiverRegistered) return
-
-        val activeReceiver = receiver ?: WiFiDirectBroadcastReceiver(
-            wifiDirectManager.wifiP2pManager,
-            wifiDirectManager.channel,
-            wifiDirectManager
-        ).also { receiver = it }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(activeReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(activeReceiver, intentFilter)
-        }
-        isReceiverRegistered = true
-    }
-
-    private fun unregisterWifiDirectReceiver() {
-        if (!isReceiverRegistered) return
-
-        try {
-            receiver?.let { unregisterReceiver(it) }
-        } catch (e: IllegalArgumentException) {
-            if (::methodChannel.isInitialized) {
-                methodChannel.invokeMethod("onDebug", "WiFi Direct receiver was already unregistered")
-            }
-        } finally {
-            isReceiverRegistered = false
-        }
-    }
-
     override fun onDestroy() {
-        unregisterWifiDirectReceiver()
+        WdCableRuntime.unregisterReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
         if (::sessionManager.isInitialized) {
             sessionManager.cleanup()
         }
@@ -128,6 +85,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         if (::wifiDirectManager.isInitialized) {
             wifiDirectManager.channel?.close()
         }
+        WdCableRuntime.clear()
         super.onDestroy()
     }
     
@@ -135,6 +93,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         fileTransferService.handleActivityResult(requestCode, resultCode, data)
+        WdCableRuntime.replayCurrentStateToFlutter()
     }
     
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {

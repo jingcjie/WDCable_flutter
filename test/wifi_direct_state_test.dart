@@ -273,6 +273,73 @@ void main() {
       );
     });
 
+    test(
+      'degraded preserves link but blocks sends until ready again',
+      () async {
+        service.emit(
+          ConnectionChangedEvent(
+            WiFiDirectConnectionInfo(
+              isConnected: true,
+              isGroupOwner: false,
+              groupOwnerAddress: '192.168.49.1',
+            ),
+          ),
+        );
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-recover',
+            role: 'client',
+            protocolVersion: 1,
+            capabilities: const ['control.chat'],
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.connectionInfo?.isConnected, isTrue);
+        expect(controller.currentState.isSessionReady, isTrue);
+
+        service.emit(
+          SessionStateChangedEvent(
+            state: 'Degraded',
+            sessionId: 'session-recover',
+            role: 'client',
+            groupOwnerAddress: '192.168.49.1',
+            disconnectReason: 'heartbeat_timeout',
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.connectionInfo?.isConnected, isTrue);
+        expect(controller.currentState.sessionState, 'Degraded');
+        expect(controller.currentState.isSessionReady, isFalse);
+
+        await controller.sendMessage('blocked while degraded');
+        await pumpEventQueue();
+
+        expect(service.sentMessages, isEmpty);
+        expect(
+          controller.currentState.logs.last,
+          contains('session is not ready'),
+        );
+
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-recover',
+            role: 'client',
+            protocolVersion: 1,
+            capabilities: const ['control.chat'],
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.sendMessage('sent after recovery');
+        await pumpEventQueue();
+
+        expect(controller.currentState.sessionState, 'Ready');
+        expect(service.sentMessages, ['sent after recovery']);
+      },
+    );
+
     test('bounds in-memory logs', () async {
       for (var i = 0; i < 250; i++) {
         service.emit(DebugEvent('entry $i'));
