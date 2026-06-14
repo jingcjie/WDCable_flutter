@@ -51,6 +51,14 @@ class WiFiDirectController {
       lastSpeedTest: null,
       isSpeedTesting: false,
       currentFileTransfer: null,
+      sessionCapabilities: const [],
+      peerCapabilities: const [],
+      audioMode: 'receive',
+      audioState: 'idle',
+      audioPeerReady: false,
+      audioStreamId: null,
+      audioStats: const AudioLinkStats(),
+      audioLastError: null,
     );
   }
 
@@ -138,11 +146,15 @@ class WiFiDirectController {
             isConnecting: false,
             pendingPeerAddress: null,
             isServerStarted: true,
+            sessionCapabilities: sessionEvent.capabilities,
+            peerCapabilities: sessionEvent.peerCapabilities,
+            audioLastError: null,
           ),
         );
         _addLog(
           'WDCable session ready (${sessionEvent.role}, protocol v${sessionEvent.protocolVersion})',
         );
+        loadAudioSupport();
         break;
 
       case SessionFailedEvent failureEvent:
@@ -290,6 +302,18 @@ class WiFiDirectController {
           progressEvent.progress,
         );
         break;
+
+      case AudioStateChangedEvent audioEvent:
+        _handleAudioStateChanged(audioEvent);
+        break;
+
+      case AudioStatsEvent audioStats:
+        _handleAudioStats(audioStats);
+        break;
+
+      case AudioErrorEvent audioError:
+        _handleAudioError(audioError);
+        break;
     }
   }
 
@@ -395,6 +419,52 @@ class WiFiDirectController {
       );
       _updateState(_currentState.copyWith(lastSpeedTest: updatedResult));
     }
+  }
+
+  void _handleAudioStateChanged(AudioStateChangedEvent event) {
+    _updateState(
+      _currentState.copyWith(
+        audioMode: event.mode == 'idle' ? _currentState.audioMode : event.mode,
+        audioState: event.state,
+        audioSource: event.source,
+        audioEncoding: event.encoding,
+        audioPeerReady: event.peerReady,
+        audioStreamId: event.streamId == 0 ? null : event.streamId,
+        audioLastError: null,
+      ),
+    );
+    if (event.message.isNotEmpty) {
+      _addLog('Audio: ${event.message}');
+    }
+  }
+
+  void _handleAudioStats(AudioStatsEvent event) {
+    _updateState(
+      _currentState.copyWith(
+        audioState: event.state,
+        audioStats: AudioLinkStats(
+          bitrateBps: event.bitrateBps,
+          bufferLevelMs: event.bufferLevelMs,
+          framesSent: event.framesSent,
+          framesReceived: event.framesReceived,
+          droppedFrames: event.droppedFrames,
+          underflowCount: event.underflowCount,
+          latencyMs: event.latencyMs,
+        ),
+      ),
+    );
+  }
+
+  void _handleAudioError(AudioErrorEvent event) {
+    final message = '${event.code}: ${event.message}';
+    _updateState(
+      _currentState.copyWith(
+        audioState: 'idle',
+        audioStreamId: null,
+        audioLastError: message,
+      ),
+    );
+    _addLog('Audio error: $message');
   }
 
   void _updateState(WiFiDirectState newState) {
@@ -803,6 +873,88 @@ class WiFiDirectController {
     } catch (e) {
       _addLog('Upload speed test failed: $e');
       return 0.0;
+    }
+  }
+
+  Future<void> loadAudioSupport() async {
+    try {
+      final support = await _service.getAudioSupport();
+      _updateState(
+        _currentState.copyWith(audioSupport: AudioSupportInfo.fromMap(support)),
+      );
+    } catch (e) {
+      _addLog('Failed to load audio support: $e');
+    }
+  }
+
+  Future<void> startAudio({
+    required String mode,
+    String source = 'microphone',
+    String encoding = 'opus',
+  }) async {
+    if (!_currentState.isSessionReady) {
+      _addLog('Audio cancelled: WDCable session is not ready');
+      return;
+    }
+    if (!_currentState.peerSupportsAudio) {
+      _updateState(
+        _currentState.copyWith(
+          audioLastError: 'The connected peer does not support Audio Link',
+        ),
+      );
+      _addLog('Audio cancelled: peer does not support Audio Link');
+      return;
+    }
+
+    var support = _currentState.audioSupport;
+    if (!support.audioLinkSupported) {
+      await loadAudioSupport();
+      support = _currentState.audioSupport;
+    }
+
+    if (mode == 'send' && !support.canSend) {
+      _updateState(_currentState.copyWith(audioLastError: support.message));
+      _addLog('Audio send cancelled: ${support.message}');
+      return;
+    }
+    if (mode == 'receive' && !support.canReceive) {
+      _updateState(_currentState.copyWith(audioLastError: support.message));
+      _addLog('Audio receive cancelled: ${support.message}');
+      return;
+    }
+
+    try {
+      _updateState(
+        _currentState.copyWith(
+          audioMode: mode,
+          audioSource: source,
+          audioEncoding: encoding,
+          audioLastError: null,
+        ),
+      );
+      final result = await _service.startAudio(
+        mode: mode,
+        source: source,
+        encoding: encoding,
+      );
+      _addLog(result);
+    } catch (e) {
+      _updateState(
+        _currentState.copyWith(
+          audioState: 'idle',
+          audioLastError: e.toString(),
+        ),
+      );
+      _addLog('Audio start failed: $e');
+    }
+  }
+
+  Future<void> stopAudio() async {
+    try {
+      final result = await _service.stopAudio();
+      _addLog(result);
+    } catch (e) {
+      _addLog('Audio stop failed: $e');
     }
   }
 

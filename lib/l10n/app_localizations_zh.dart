@@ -376,4 +376,91 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsSubtitle => '自定义您的WiFi直连体验';
+
+  @override
+  String get audioLink => '音频链接';
+
+  @override
+  String get audioConnectToPeerFirst => '请先连接到对等设备';
+
+  @override
+  String get audioPeerUnsupported => '已连接的对等设备不支持音频链接';
+
+  @override
+  String get audioReady => '音频链接已就绪';
+
+  @override
+  String get audioMode => '模式';
+
+  @override
+  String get audioReceive => '接收';
+
+  @override
+  String get audioSend => '发送';
+
+  @override
+  String get audioSource => '来源';
+
+  @override
+  String get audioMicrophone => '麦克风';
+
+  @override
+  String get audioDeviceAudioUnavailable => '设备音频暂不可用';
+
+  @override
+  String get audioEncoding => '编码';
+
+  @override
+  String get audioOpus24Kbps => 'Opus 24 kbps';
+
+  @override
+  String get audioOnlyOption => '唯一选项';
+
+  @override
+  String get audioStop => '停止音频';
+
+  @override
+  String get audioStart => '开始音频';
+
+  @override
+  String get audioLiveStats => '实时统计';
+
+  @override
+  String get audioState => '状态';
+
+  @override
+  String get audioBitrate => '比特率';
+
+  @override
+  String get audioBuffer => '缓冲';
+
+  @override
+  String get audioDropped => '丢帧';
+
+  @override
+  String get audioFrames => '帧';
+
+  @override
+  String get audioLatency => '延迟';
+
+  @override
+  String get audioStateReceiveReady => '接收就绪';
+
+  @override
+  String get audioStateOfferSent => '已发送请求';
+
+  @override
+  String get audioStateConnecting => '连接中';
+
+  @override
+  String get audioStateStreaming => '传输中';
+
+  @override
+  String get audioStateIdle => '空闲';
+
+  @override
+  String get notAvailableShort => 'N/A';
+
+  @override
+  String get kbpsUnit => 'kbps';
 }

@@ -65,6 +65,24 @@ class SocketSessionTransportAdapter(
         }
     }
 
+    override fun listen(
+        channel: ProtocolChannel,
+        preferredPort: Int
+    ): SessionTransportListener {
+        val serverSocket = ServerSocket()
+        serverSockets.add(serverSocket)
+        try {
+            serverSocket.reuseAddress = true
+            serverSocket.soTimeout = acceptPollTimeoutMs
+            serverSocket.bind(InetSocketAddress(preferredPort))
+            return SocketSessionTransportListener(channel, serverSocket)
+        } catch (exception: Exception) {
+            serverSockets.remove(serverSocket)
+            closeQuietly(serverSocket)
+            throw exception
+        }
+    }
+
     override fun close() {
         serverSockets.toList().forEach(::closeQuietly)
         sockets.toList().forEach(::closeQuietly)
@@ -79,6 +97,38 @@ class SocketSessionTransportAdapter(
     private fun configureSocket(socket: Socket, channel: ProtocolChannel) {
         socket.keepAlive = keepAlive
         socket.tcpNoDelay = channel != ProtocolChannel.BULK
+    }
+
+    private inner class SocketSessionTransportListener(
+        override val channel: ProtocolChannel,
+        private val serverSocket: ServerSocket
+    ) : SessionTransportListener {
+        override val port: Int
+            get() = serverSocket.localPort
+
+        override fun accept(shouldCancel: () -> Boolean): SessionTransport {
+            try {
+                while (!shouldCancel()) {
+                    try {
+                        val socket = serverSocket.accept()
+                        configureSocket(socket, channel)
+                        sockets.add(socket)
+                        return SocketSessionTransport(channel, socket)
+                    } catch (exception: SocketTimeoutException) {
+                        // Poll again so cancellation and session replacement can stop accept promptly.
+                    }
+                }
+
+                throw InterruptedIOException("Accept cancelled for ${channel.protocolName}")
+            } finally {
+                close()
+            }
+        }
+
+        override fun close() {
+            serverSockets.remove(serverSocket)
+            closeQuietly(serverSocket)
+        }
     }
 
     private fun closeQuietly(serverSocket: ServerSocket) {

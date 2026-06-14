@@ -30,7 +30,21 @@ interface SessionTransportAdapter {
         port: Int
     ): SessionTransport
 
+    fun listen(
+        channel: ProtocolChannel,
+        preferredPort: Int = 0
+    ): SessionTransportListener
+
     fun close()
 
     fun cancel()
+}
+
+interface SessionTransportListener {
+    val channel: ProtocolChannel
+    val port: Int
+
+    fun accept(shouldCancel: () -> Boolean): SessionTransport
+
+    fun close()
 }

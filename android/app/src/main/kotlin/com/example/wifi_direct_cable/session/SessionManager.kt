@@ -43,6 +43,7 @@ class SessionManager(
         val role: SessionRole,
         val peerAddress: String?,
         val transports: Map<ProtocolChannel, SessionTransport>,
+        val peerCapabilities: MutableSet<String> = mutableSetOf(),
         val sequenceNumber: AtomicLong = AtomicLong(0),
         val lastFrameReceivedAt: AtomicLong = AtomicLong(System.currentTimeMillis())
     ) {
@@ -82,6 +83,16 @@ class SessionManager(
     private val activeSpeedReceives = ConcurrentHashMap<Long, IncomingSpeedStream>()
     private val speedTestActive = AtomicBoolean(false)
     private val bulkSendLock = Any()
+    private val audioTransportLock = Any()
+
+    @Volatile
+    private var audioHandler: AudioSessionHandler? = null
+
+    @Volatile
+    private var audioTransport: SessionTransport? = null
+
+    @Volatile
+    private var audioListener: SessionTransportListener? = null
 
     @Volatile
     private var runtime: Runtime? = null
@@ -132,6 +143,8 @@ class SessionManager(
 
         val sessionId = UUID.randomUUID().toString()
         val newGeneration = generation.incrementAndGet()
+        audioHandler?.onSessionEnded("wifi_direct_reconnected")
+        closeAudioTransport()
         closeRuntimeOnly()
         transportAdapter.cancel()
         stopHeartbeat()
@@ -163,7 +176,9 @@ class SessionManager(
         val role = currentRole
 
         transitionForCleanup(SessionPhase.DISCONNECTING, sessionId, role, reason)
+        audioHandler?.onSessionEnded(reason)
         stopHeartbeat()
+        closeAudioTransport()
         closeRuntimeOnly()
         transportAdapter.cancel()
         runtime = null
@@ -189,6 +204,10 @@ class SessionManager(
         methodChannel.invokeOnMain("onDebug", "Transport settings received: bufferSize=$bufferSize timeout=$timeout keepAlive=$keepAlive")
     }
 
+    fun registerAudioHandler(handler: AudioSessionHandler) {
+        audioHandler = handler
+    }
+
     fun clearSpeedTestState() {
         speedTestActive.set(false)
     }
@@ -205,8 +224,173 @@ class SessionManager(
             "isReady" to (phase == SessionPhase.READY),
             "disconnectReason" to (lastDisconnectReason ?: ""),
             "controlChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.CONTROL) == true),
-            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true)
+            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true),
+            "audioChannelOpen" to (audioTransport != null)
         )
+    }
+
+    fun getAudioSessionInfo(): AudioSessionInfo? {
+        val activeRuntime = runtime ?: return null
+        if (stateMachine.phase != SessionPhase.READY) return null
+        return AudioSessionInfo(
+            sessionId = activeRuntime.sessionId,
+            role = activeRuntime.role,
+            peerAddress = activeRuntime.peerAddress,
+            peerCapabilities = activeRuntime.peerCapabilities.toSet()
+        )
+    }
+
+    fun sendAudioControl(metadata: JSONObject) {
+        val activeRuntime = runtime ?: throw IOException("The WDCable session is not ready")
+        activeRuntime.controlTransport.writeFrame(
+            ProtocolFrame(
+                type = ProtocolFrameType.CONTROL_MESSAGE,
+                channel = ProtocolChannel.CONTROL,
+                streamId = metadata.optLong("streamId", 0L),
+                sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
+                correlationId = UUID.randomUUID(),
+                metadataJson = metadata
+                    .put("sessionId", activeRuntime.sessionId)
+                    .put("timestamp", System.currentTimeMillis())
+                    .toString()
+            )
+        )
+    }
+
+    fun sendAudioError(streamId: Long, code: String, message: String) {
+        val activeRuntime = runtime ?: return
+        sendFeatureError(activeRuntime, streamId, code, message, "audio")
+    }
+
+    fun startAudioListener(
+        streamId: Long,
+        onPort: (Int) -> Unit,
+        onConnected: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val activeRuntime = runtime
+        if (activeRuntime == null || stateMachine.phase != SessionPhase.READY) {
+            onError(IOException("The WDCable session is not ready"))
+            return
+        }
+        if (activeRuntime.role != SessionRole.GROUP_OWNER) {
+            onError(IOException("Only the group owner can listen for the audio channel"))
+            return
+        }
+
+        try {
+            closeAudioTransport()
+            val listener = transportAdapter.listen(ProtocolChannel.AUDIO, preferredPort = 0)
+            synchronized(audioTransportLock) {
+                audioListener = listener
+            }
+            onPort(listener.port)
+            ioExecutor.execute {
+                try {
+                    val transport = listener.accept { !isCurrent(activeRuntime.generation) }
+                    synchronized(audioTransportLock) {
+                        audioTransport = transport
+                        audioListener = null
+                    }
+                    startAudioReadLoop(activeRuntime, transport)
+                    DiagnosticsLogger.log(
+                        "audio",
+                        "Audio channel accepted",
+                        mapOf("sessionId" to activeRuntime.sessionId, "streamId" to streamId)
+                    )
+                    onConnected()
+                } catch (exception: Exception) {
+                    synchronized(audioTransportLock) {
+                        if (audioListener === listener) {
+                            audioListener = null
+                        }
+                    }
+                    if (isCurrent(activeRuntime.generation)) {
+                        onError(exception)
+                    }
+                }
+            }
+        } catch (exception: Exception) {
+            onError(exception)
+        }
+    }
+
+    fun connectAudioTransport(
+        streamId: Long,
+        port: Int,
+        onConnected: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val activeRuntime = runtime
+        if (activeRuntime == null || stateMachine.phase != SessionPhase.READY) {
+            onError(IOException("The WDCable session is not ready"))
+            return
+        }
+        if (activeRuntime.role != SessionRole.CLIENT) {
+            onError(IOException("Only the client connects to the audio channel"))
+            return
+        }
+        val host = activeRuntime.peerAddress
+        if (host.isNullOrBlank()) {
+            onError(IOException("Missing group owner address for audio channel"))
+            return
+        }
+
+        closeAudioTransport()
+        ioExecutor.execute {
+            try {
+                val transport = connectWithRetry(ProtocolChannel.AUDIO, host, port, activeRuntime.generation)
+                synchronized(audioTransportLock) {
+                    audioTransport = transport
+                }
+                startAudioReadLoop(activeRuntime, transport)
+                DiagnosticsLogger.log(
+                    "audio",
+                    "Audio channel connected",
+                    mapOf("sessionId" to activeRuntime.sessionId, "streamId" to streamId, "port" to port)
+                )
+                onConnected()
+            } catch (exception: Exception) {
+                if (isCurrent(activeRuntime.generation)) {
+                    onError(exception)
+                }
+            }
+        }
+    }
+
+    fun writeAudioFrame(streamId: Long, sequenceNumber: Long, metadata: JSONObject, payload: ByteArray) {
+        val transport = synchronized(audioTransportLock) { audioTransport }
+            ?: throw IOException("Audio channel is not connected")
+        transport.writeFrame(
+            ProtocolFrame(
+                type = ProtocolFrameType.AUDIO_FRAME,
+                channel = ProtocolChannel.AUDIO,
+                streamId = streamId,
+                sequenceNumber = sequenceNumber,
+                correlationId = UUID.randomUUID(),
+                metadataJson = metadata.toString(),
+                payload = payload
+            )
+        )
+    }
+
+    fun closeAudioTransport() {
+        val listener: SessionTransportListener?
+        val transport: SessionTransport?
+        synchronized(audioTransportLock) {
+            listener = audioListener
+            transport = audioTransport
+            audioListener = null
+            audioTransport = null
+        }
+        try {
+            listener?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            transport?.cancel()
+        } catch (_: Exception) {
+        }
     }
 
     fun sendFileStream(
@@ -480,14 +664,14 @@ class SessionManager(
                 if (ack.type != ProtocolFrameType.HANDSHAKE_ACK) {
                     throw PeerProtocolMissingException("Expected handshake ack, received ${ack.type.protocolName}")
                 }
-                validateHandshakeAck(ack.metadataJson)
+                activeRuntime.peerCapabilities.addAll(validateHandshakeAck(ack.metadataJson))
                 DiagnosticsLogger.log("protocol", "Handshake ack accepted", mapOf("sessionId" to activeRuntime.sessionId))
             } else {
                 val hello = control.readFrame() ?: throw PeerProtocolMissingException("Peer closed before handshake hello")
                 if (hello.type != ProtocolFrameType.HANDSHAKE_HELLO) {
                     throw PeerProtocolMissingException("Expected handshake hello, received ${hello.type.protocolName}")
                 }
-                validateHandshakeHello(hello.metadataJson)
+                activeRuntime.peerCapabilities.addAll(validateHandshakeHello(hello.metadataJson))
                 DiagnosticsLogger.log("protocol", "Handshake hello accepted", mapOf("sessionId" to activeRuntime.sessionId))
                 control.writeFrame(buildHandshakeAck(activeRuntime))
             }
@@ -498,7 +682,7 @@ class SessionManager(
         }
     }
 
-    private fun validateHandshakeHello(metadataJson: String) {
+    private fun validateHandshakeHello(metadataJson: String): Set<String> {
         val metadata = JSONObject(metadataJson)
         if (metadata.optString("appId") != ProtocolConstants.APP_ID) {
             throw PeerProtocolMissingException("Peer app id is not WDCable")
@@ -511,9 +695,10 @@ class SessionManager(
                 "Peer supports protocol $protocolMin..$protocolMax"
             )
         }
+        return capabilitiesFrom(metadata)
     }
 
-    private fun validateHandshakeAck(metadataJson: String) {
+    private fun validateHandshakeAck(metadataJson: String): Set<String> {
         val metadata = JSONObject(metadataJson)
         if (metadata.optString("appId") != ProtocolConstants.APP_ID) {
             throw PeerProtocolMissingException("Peer app id is not WDCable")
@@ -523,6 +708,19 @@ class SessionManager(
                 ProtocolError.UNSUPPORTED_VERSION,
                 "Peer selected unsupported protocol ${metadata.optInt("protocolVersion", -1)}"
             )
+        }
+        return capabilitiesFrom(metadata)
+    }
+
+    private fun capabilitiesFrom(metadata: JSONObject): Set<String> {
+        val capabilities = metadata.optJSONArray("capabilities") ?: return emptySet()
+        return buildSet {
+            for (index in 0 until capabilities.length()) {
+                val capability = capabilities.optString(index)
+                if (capability.isNotBlank()) {
+                    add(capability)
+                }
+            }
         }
     }
 
@@ -569,6 +767,8 @@ class SessionManager(
             .put(ProtocolConstants.CAPABILITY_BULK_FILE)
             .put(ProtocolConstants.CAPABILITY_BULK_SPEED)
             .put(ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT)
+            .put(ProtocolConstants.CAPABILITY_AUDIO_LINK)
+            .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS)
     }
 
     private fun channelsJson(): JSONObject {
@@ -626,6 +826,56 @@ class SessionManager(
                             exception,
                             false
                         )
+                    }
+                    return@execute
+                }
+            }
+        }
+    }
+
+    private fun startAudioReadLoop(activeRuntime: Runtime, transport: SessionTransport) {
+        ioExecutor.execute {
+            while (
+                isCurrent(activeRuntime.generation) &&
+                stateMachine.phase == SessionPhase.READY &&
+                synchronized(audioTransportLock) { audioTransport === transport }
+            ) {
+                try {
+                    val frame = transport.readFrame()
+                        ?: throw IOException("Audio channel closed by peer")
+                    if (frame.type == ProtocolFrameType.AUDIO_FRAME && frame.channel == ProtocolChannel.AUDIO) {
+                        audioHandler?.onAudioFrame(frame)
+                    } else {
+                        DiagnosticsLogger.log(
+                            "audio",
+                            "Ignoring unexpected audio frame",
+                            mapOf("type" to frame.type.protocolName, "channel" to frame.channel.protocolName)
+                        )
+                    }
+                } catch (exception: Exception) {
+                    val wasActive = synchronized(audioTransportLock) {
+                        if (audioTransport === transport) {
+                            audioTransport = null
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    try {
+                        transport.cancel()
+                    } catch (_: Exception) {
+                    }
+                    if (wasActive && isCurrent(activeRuntime.generation) && stateMachine.phase == SessionPhase.READY) {
+                        DiagnosticsLogger.log(
+                            "audio",
+                            "Audio channel closed",
+                            mapOf(
+                                "sessionId" to activeRuntime.sessionId,
+                                "errorType" to exception.javaClass.simpleName,
+                                "error" to exception.message
+                            )
+                        )
+                        audioHandler?.onAudioTransportClosed("audio_transport_closed")
                     }
                     return@execute
                 }
@@ -860,7 +1110,14 @@ class SessionManager(
                 val metadata = if (frame.metadataJson.isBlank()) JSONObject() else JSONObject(frame.metadataJson)
                 val code = metadata.optString("code", "peer_error")
                 val message = metadata.optString("message", "Peer reported protocol error")
-                if (code.startsWith("file_") || code.startsWith("speed_") || code.startsWith("bulk_")) {
+                if (code.startsWith("audio_")) {
+                    audioHandler?.onAudioFeatureError(code, message, metadata.optLong("streamId", frame.streamId))
+                    DiagnosticsLogger.log(
+                        "audio",
+                        "Peer reported audio error",
+                        mapOf("sessionId" to activeRuntime.sessionId, "code" to code, "message" to message)
+                    )
+                } else if (code.startsWith("file_") || code.startsWith("speed_") || code.startsWith("bulk_")) {
                     methodChannel.invokeOnMain("onError", message)
                     DiagnosticsLogger.log(
                         "bulk",
@@ -894,8 +1151,12 @@ class SessionManager(
 
     private fun handleControlMessage(activeRuntime: Runtime, frame: ProtocolFrame) {
         val metadata = if (frame.metadataJson.isBlank()) JSONObject() else JSONObject(frame.metadataJson)
-        when (metadata.optString("kind")) {
-            "chat" -> {
+        val kind = metadata.optString("kind")
+        when {
+            kind.startsWith("audio.") -> {
+                audioHandler?.onAudioControlMessage(metadata)
+            }
+            kind == "chat" -> {
                 val message = frame.payload.toString(Charsets.UTF_8)
                 val data = mapOf(
                     "message" to message,
@@ -916,7 +1177,7 @@ class SessionManager(
                 )
             }
             else -> {
-                methodChannel.invokeOnMain("onDebug", "Unknown control message kind: ${metadata.optString("kind")}")
+                methodChannel.invokeOnMain("onDebug", "Unknown control message kind: $kind")
             }
         }
     }
@@ -1213,6 +1474,16 @@ class SessionManager(
     }
 
     private fun sendBulkError(activeRuntime: Runtime, streamId: Long, code: String, message: String) {
+        sendFeatureError(activeRuntime, streamId, code, message, "bulk")
+    }
+
+    private fun sendFeatureError(
+        activeRuntime: Runtime,
+        streamId: Long,
+        code: String,
+        message: String,
+        category: String
+    ) {
         try {
             activeRuntime.controlTransport.writeFrame(
                 ProtocolFrame(
@@ -1229,14 +1500,14 @@ class SessionManager(
                 )
             )
             DiagnosticsLogger.log(
-                "bulk",
-                "Bulk error sent",
+                category,
+                "Feature error sent",
                 mapOf("sessionId" to activeRuntime.sessionId, "streamId" to streamId, "code" to code, "message" to message)
             )
         } catch (exception: Exception) {
             DiagnosticsLogger.log(
-                "bulk",
-                "Bulk error send failed",
+                category,
+                "Feature error send failed",
                 mapOf(
                     "sessionId" to activeRuntime.sessionId,
                     "streamId" to streamId,
@@ -1370,6 +1641,8 @@ class SessionManager(
             )
         )
         stopHeartbeat()
+        audioHandler?.onSessionEnded(reason)
+        closeAudioTransport()
         cleanupIncomingBulkStreams(deletePartialFiles = true)
         speedTestActive.set(false)
         closeRuntimeOnly()
@@ -1410,8 +1683,11 @@ class SessionManager(
                     ProtocolConstants.CAPABILITY_CHAT,
                     ProtocolConstants.CAPABILITY_BULK_FILE,
                     ProtocolConstants.CAPABILITY_BULK_SPEED,
-                    ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT
-                )
+                    ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT,
+                    ProtocolConstants.CAPABILITY_AUDIO_LINK,
+                    ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS
+                ),
+                "peerCapabilities" to activeRuntime.peerCapabilities.toList()
             )
         )
     }
@@ -1471,6 +1747,7 @@ class SessionManager(
     }
 
     private fun closeRuntimeOnly() {
+        closeAudioTransport()
         runtime?.transports?.values?.let(::closeTransports)
         runtime = null
     }

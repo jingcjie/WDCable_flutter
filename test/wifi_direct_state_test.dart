@@ -32,6 +32,8 @@ void main() {
           isCompleted: false,
           timestamp: DateTime(2026),
         ),
+        audioStreamId: 12,
+        audioLastError: 'old error',
       );
 
       final cleared = state.copyWith(
@@ -40,6 +42,8 @@ void main() {
         connectionInfo: null,
         lastSpeedTest: null,
         currentFileTransfer: null,
+        audioStreamId: null,
+        audioLastError: null,
       );
 
       expect(cleared.isConnecting, isFalse);
@@ -47,6 +51,8 @@ void main() {
       expect(cleared.connectionInfo, isNull);
       expect(cleared.lastSpeedTest, isNull);
       expect(cleared.currentFileTransfer, isNull);
+      expect(cleared.audioStreamId, isNull);
+      expect(cleared.audioLastError, isNull);
     });
   });
 
@@ -280,6 +286,120 @@ void main() {
         isFalse,
       );
     });
+
+    test('handles audio state stats and errors', () async {
+      service.emit(
+        SessionReadyEvent(
+          sessionId: 'session-audio',
+          role: 'client',
+          protocolVersion: 1,
+          capabilities: const ['audio.link', 'audio.codec.opus'],
+          peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+        ),
+      );
+      await pumpEventQueue();
+
+      service.emit(
+        AudioStateChangedEvent(
+          mode: 'receive',
+          state: 'streaming',
+          streamId: 44,
+          source: 'microphone',
+          encoding: 'opus',
+          peerReady: true,
+          isStreaming: true,
+          message: 'Audio Link streaming',
+        ),
+      );
+      service.emit(
+        AudioStatsEvent(
+          mode: 'receive',
+          state: 'streaming',
+          streamId: 44,
+          bitrateBps: 24000,
+          bufferLevelMs: 60,
+          framesSent: 0,
+          framesReceived: 5,
+          droppedFrames: 1,
+          underflowCount: 2,
+          latencyMs: -1,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.audioState, 'streaming');
+      expect(controller.currentState.audioStreamId, 44);
+      expect(controller.currentState.audioStats.bitrateBps, 24000);
+      expect(controller.currentState.audioStats.bufferLevelMs, 60);
+
+      service.emit(
+        AudioErrorEvent(
+          code: 'audio_receiver_not_ready',
+          message: 'Receiver has not started',
+          streamId: 44,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.audioState, 'idle');
+      expect(
+        controller.currentState.audioLastError,
+        contains('audio_receiver_not_ready'),
+      );
+    });
+
+    test(
+      'audio start is blocked until session and peer support are ready',
+      () async {
+        await controller.startAudio(mode: 'send');
+        await pumpEventQueue();
+
+        expect(service.audioStartCalls, 0);
+        expect(
+          controller.currentState.logs.last,
+          contains('session is not ready'),
+        );
+
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-no-audio',
+            role: 'client',
+            protocolVersion: 1,
+            capabilities: const ['audio.link', 'audio.codec.opus'],
+            peerCapabilities: const ['control.chat'],
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.startAudio(mode: 'send');
+        await pumpEventQueue();
+
+        expect(service.audioStartCalls, 0);
+        expect(
+          controller.currentState.audioLastError,
+          contains('does not support'),
+        );
+      },
+    );
+
+    test('audio start calls native service when supported', () async {
+      service.emit(
+        SessionReadyEvent(
+          sessionId: 'session-audio-ready',
+          role: 'client',
+          protocolVersion: 1,
+          capabilities: const ['audio.link', 'audio.codec.opus'],
+          peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+        ),
+      );
+      await pumpEventQueue();
+
+      await controller.startAudio(mode: 'receive');
+      await pumpEventQueue();
+
+      expect(service.audioStartCalls, 1);
+      expect(service.lastAudioMode, 'receive');
+    });
   });
 }
 
@@ -288,6 +408,8 @@ class _FakeWiFiDirectService extends WiFiDirectService {
       StreamController<WiFiDirectEvent>.broadcast();
 
   int connectCalls = 0;
+  int audioStartCalls = 0;
+  String? lastAudioMode;
   final List<String> sentMessages = [];
 
   @override
@@ -339,6 +461,32 @@ class _FakeWiFiDirectService extends WiFiDirectService {
 
   @override
   Future<void> setSpeedTesting(bool enabled) async {}
+
+  @override
+  Future<Map<String, dynamic>> getAudioSupport() async {
+    return {
+      'audioLinkSupported': true,
+      'canSend': true,
+      'canReceive': true,
+      'codec': 'opus',
+      'source': 'microphone',
+      'message': 'Audio Link is supported',
+    };
+  }
+
+  @override
+  Future<String> startAudio({
+    required String mode,
+    String source = 'microphone',
+    String encoding = 'opus',
+  }) async {
+    audioStartCalls++;
+    lastAudioMode = mode;
+    return 'Audio started';
+  }
+
+  @override
+  Future<String> stopAudio() async => 'Audio stopped';
 
   @override
   void dispose() {

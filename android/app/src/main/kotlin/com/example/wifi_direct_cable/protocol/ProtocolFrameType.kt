@@ -12,7 +12,8 @@ enum class ProtocolFrameType(val id: Int, val protocolName: String) {
     BULK_START(20, "bulk.start"),
     BULK_CHUNK(21, "bulk.chunk"),
     BULK_COMPLETE(22, "bulk.complete"),
-    BULK_CANCEL(23, "bulk.cancel");
+    BULK_CANCEL(23, "bulk.cancel"),
+    AUDIO_FRAME(30, "audio.frame");
 
     companion object {
         fun fromId(id: Int): ProtocolFrameType {

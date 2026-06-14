@@ -8,6 +8,7 @@ import 'controllers/wifi_direct_controller.dart';
 import 'models/wifi_direct_models.dart';
 import 'widgets/connection_tab.dart';
 import 'widgets/chat_tab.dart';
+import 'widgets/audio_tab.dart';
 import 'widgets/speed_test_tab.dart';
 import 'widgets/file_transfer_tab.dart';
 import 'widgets/settings_tab.dart';
@@ -72,7 +73,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _controller = WiFiDirectController(WiFiDirectService());
     _initializeController();
   }
@@ -156,6 +157,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                         height: 60,
                       ),
                       Tab(icon: Icon(Icons.speed, size: 20), height: 60),
+                      Tab(icon: Icon(Icons.graphic_eq, size: 20), height: 60),
                       Tab(icon: Icon(Icons.folder, size: 20), height: 60),
                       Tab(icon: Icon(Icons.settings, size: 20), height: 60),
                     ],
@@ -172,6 +174,7 @@ class _WiFiDirectHomePageState extends State<WiFiDirectHomePage>
                       ConnectionTab(controller: _controller, state: _state),
                       ChatTab(controller: _controller, state: _state),
                       SpeedTestTab(controller: _controller, state: _state),
+                      AudioTab(controller: _controller, state: _state),
                       FileTransferTab(controller: _controller, state: _state),
                       SettingsTab(controller: _controller, state: _state),
                     ],

@@ -384,4 +384,92 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSubtitle => 'Customize your WiFi Direct experience';
+
+  @override
+  String get audioLink => 'Audio Link';
+
+  @override
+  String get audioConnectToPeerFirst => 'Connect to a peer first';
+
+  @override
+  String get audioPeerUnsupported =>
+      'The connected peer does not support Audio Link';
+
+  @override
+  String get audioReady => 'Audio Link is ready';
+
+  @override
+  String get audioMode => 'Mode';
+
+  @override
+  String get audioReceive => 'Receive';
+
+  @override
+  String get audioSend => 'Send';
+
+  @override
+  String get audioSource => 'Source';
+
+  @override
+  String get audioMicrophone => 'Microphone';
+
+  @override
+  String get audioDeviceAudioUnavailable => 'Device audio unavailable';
+
+  @override
+  String get audioEncoding => 'Encoding';
+
+  @override
+  String get audioOpus24Kbps => 'Opus 24 kbps';
+
+  @override
+  String get audioOnlyOption => 'Only option';
+
+  @override
+  String get audioStop => 'Stop Audio';
+
+  @override
+  String get audioStart => 'Start Audio';
+
+  @override
+  String get audioLiveStats => 'Live Stats';
+
+  @override
+  String get audioState => 'State';
+
+  @override
+  String get audioBitrate => 'Bitrate';
+
+  @override
+  String get audioBuffer => 'Buffer';
+
+  @override
+  String get audioDropped => 'Dropped';
+
+  @override
+  String get audioFrames => 'Frames';
+
+  @override
+  String get audioLatency => 'Latency';
+
+  @override
+  String get audioStateReceiveReady => 'Receive ready';
+
+  @override
+  String get audioStateOfferSent => 'Offer sent';
+
+  @override
+  String get audioStateConnecting => 'Connecting';
+
+  @override
+  String get audioStateStreaming => 'Streaming';
+
+  @override
+  String get audioStateIdle => 'Idle';
+
+  @override
+  String get notAvailableShort => 'N/A';
+
+  @override
+  String get kbpsUnit => 'kbps';
 }

@@ -8,6 +8,7 @@ import android.net.wifi.p2p.WifiP2pDeviceList
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Bundle
+import com.example.wifi_direct_cable.audio.AudioService
 import com.example.wifi_direct_cable.session.SessionManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -22,6 +23,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     private lateinit var chatService: ChatService
     private lateinit var speedTestService: SpeedTestService
     private lateinit var fileTransferService: FileTransferService
+    private lateinit var audioService: AudioService
     private lateinit var permissionManager: PermissionManager
     private lateinit var methodChannelHandler: FlutterMethodChannelHandler
     
@@ -53,6 +55,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         chatService = ChatService(sessionManager, methodChannel)
         speedTestService = SpeedTestService(sessionManager, methodChannel)
         fileTransferService = FileTransferService(this, sessionManager, methodChannel)
+        audioService = AudioService(this, sessionManager, methodChannel, permissionManager)
         
         methodChannelHandler = FlutterMethodChannelHandler(
             this,
@@ -62,6 +65,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
             chatService,
             speedTestService,
             fileTransferService,
+            audioService,
             permissionManager
         )
         
@@ -117,6 +121,9 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         unregisterWifiDirectReceiver()
         if (::sessionManager.isInitialized) {
             sessionManager.cleanup()
+        }
+        if (::audioService.isInitialized) {
+            audioService.cleanup()
         }
         if (::wifiDirectManager.isInitialized) {
             wifiDirectManager.channel?.close()

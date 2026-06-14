@@ -41,12 +41,14 @@ class SessionReadyEvent extends WiFiDirectEvent {
   final String role;
   final int protocolVersion;
   final List<String> capabilities;
+  final List<String> peerCapabilities;
 
   SessionReadyEvent({
     required this.sessionId,
     required this.role,
     required this.protocolVersion,
     required this.capabilities,
+    this.peerCapabilities = const [],
   });
 }
 
@@ -164,6 +166,66 @@ class ErrorEvent extends WiFiDirectEvent {
   ErrorEvent(this.error);
 }
 
+class AudioStateChangedEvent extends WiFiDirectEvent {
+  final String mode;
+  final String state;
+  final int streamId;
+  final String source;
+  final String encoding;
+  final bool peerReady;
+  final bool isStreaming;
+  final String message;
+
+  AudioStateChangedEvent({
+    required this.mode,
+    required this.state,
+    required this.streamId,
+    required this.source,
+    required this.encoding,
+    required this.peerReady,
+    required this.isStreaming,
+    required this.message,
+  });
+}
+
+class AudioStatsEvent extends WiFiDirectEvent {
+  final String mode;
+  final String state;
+  final int streamId;
+  final int bitrateBps;
+  final int bufferLevelMs;
+  final int framesSent;
+  final int framesReceived;
+  final int droppedFrames;
+  final int underflowCount;
+  final int latencyMs;
+
+  AudioStatsEvent({
+    required this.mode,
+    required this.state,
+    required this.streamId,
+    required this.bitrateBps,
+    required this.bufferLevelMs,
+    required this.framesSent,
+    required this.framesReceived,
+    required this.droppedFrames,
+    required this.underflowCount,
+    required this.latencyMs,
+  });
+}
+
+class AudioErrorEvent extends WiFiDirectEvent {
+  final String code;
+  final String message;
+  final int streamId;
+
+  AudioErrorEvent({
+    required this.code,
+    required this.message,
+    required this.streamId,
+  });
+}
+
 class WiFiDirectResetEvent extends WiFiDirectEvent {}
 
 class PermissionDeniedEvent extends WiFiDirectEvent {
@@ -247,6 +309,7 @@ class WiFiDirectService {
             call.arguments as Map,
           );
           final capabilities = sessionData['capabilities'];
+          final peerCapabilities = sessionData['peerCapabilities'];
           _eventController.add(
             SessionReadyEvent(
               sessionId: sessionData['sessionId']?.toString() ?? '',
@@ -259,6 +322,9 @@ class WiFiDirectService {
                         0,
               capabilities: capabilities is List
                   ? capabilities.map((item) => item.toString()).toList()
+                  : const [],
+              peerCapabilities: peerCapabilities is List
+                  ? peerCapabilities.map((item) => item.toString()).toList()
                   : const [],
             ),
           );
@@ -427,6 +493,57 @@ class WiFiDirectService {
         case 'onError':
           final String error = call.arguments;
           _eventController.add(ErrorEvent(error));
+          break;
+
+        case 'onAudioStateChanged':
+          final Map<String, dynamic> audioData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            AudioStateChangedEvent(
+              mode: audioData['mode']?.toString() ?? 'idle',
+              state: audioData['state']?.toString() ?? 'idle',
+              streamId: _readInt(audioData['streamId']),
+              source: audioData['source']?.toString() ?? 'microphone',
+              encoding: audioData['encoding']?.toString() ?? 'opus',
+              peerReady: audioData['peerReady'] == true,
+              isStreaming: audioData['isStreaming'] == true,
+              message: audioData['message']?.toString() ?? '',
+            ),
+          );
+          break;
+
+        case 'onAudioStats':
+          final Map<String, dynamic> statsData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            AudioStatsEvent(
+              mode: statsData['mode']?.toString() ?? 'idle',
+              state: statsData['state']?.toString() ?? 'idle',
+              streamId: _readInt(statsData['streamId']),
+              bitrateBps: _readInt(statsData['bitrateBps']),
+              bufferLevelMs: _readInt(statsData['bufferLevelMs']),
+              framesSent: _readInt(statsData['framesSent']),
+              framesReceived: _readInt(statsData['framesReceived']),
+              droppedFrames: _readInt(statsData['droppedFrames']),
+              underflowCount: _readInt(statsData['underflowCount']),
+              latencyMs: _readInt(statsData['latencyMs']),
+            ),
+          );
+          break;
+
+        case 'onAudioError':
+          final Map<String, dynamic> errorData = Map<String, dynamic>.from(
+            call.arguments as Map,
+          );
+          _eventController.add(
+            AudioErrorEvent(
+              code: errorData['code']?.toString() ?? 'audio_error',
+              message: errorData['message']?.toString() ?? 'Audio Link error',
+              streamId: _readInt(errorData['streamId']),
+            ),
+          );
           break;
 
         case 'onWifiDirectReset':
@@ -637,7 +754,48 @@ class WiFiDirectService {
     }
   }
 
+  Future<Map<String, dynamic>> getAudioSupport() async {
+    try {
+      final result = await _channel.invokeMethod('getAudioSupport');
+      return Map<String, dynamic>.from(result as Map);
+    } catch (e) {
+      throw Exception('Failed to get audio support: $e');
+    }
+  }
+
+  Future<String> startAudio({
+    required String mode,
+    String source = 'microphone',
+    String encoding = 'opus',
+  }) async {
+    try {
+      final String result = await _channel.invokeMethod('startAudio', {
+        'mode': mode,
+        'source': source,
+        'encoding': encoding,
+      });
+      return result;
+    } catch (e) {
+      throw Exception('Failed to start audio: $e');
+    }
+  }
+
+  Future<String> stopAudio() async {
+    try {
+      final String result = await _channel.invokeMethod('stopAudio');
+      return result;
+    } catch (e) {
+      throw Exception('Failed to stop audio: $e');
+    }
+  }
+
   void dispose() {
     _eventController.close();
+  }
+
+  int _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }

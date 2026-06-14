@@ -769,6 +769,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Customize your WiFi Direct experience'**
   String get settingsSubtitle;
+
+  /// No description provided for @audioLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Link'**
+  String get audioLink;
+
+  /// No description provided for @audioConnectToPeerFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a peer first'**
+  String get audioConnectToPeerFirst;
+
+  /// No description provided for @audioPeerUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'The connected peer does not support Audio Link'**
+  String get audioPeerUnsupported;
+
+  /// No description provided for @audioReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Link is ready'**
+  String get audioReady;
+
+  /// No description provided for @audioMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get audioMode;
+
+  /// No description provided for @audioReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive'**
+  String get audioReceive;
+
+  /// No description provided for @audioSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get audioSend;
+
+  /// No description provided for @audioSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get audioSource;
+
+  /// No description provided for @audioMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get audioMicrophone;
+
+  /// No description provided for @audioDeviceAudioUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Device audio unavailable'**
+  String get audioDeviceAudioUnavailable;
+
+  /// No description provided for @audioEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'Encoding'**
+  String get audioEncoding;
+
+  /// No description provided for @audioOpus24Kbps.
+  ///
+  /// In en, this message translates to:
+  /// **'Opus 24 kbps'**
+  String get audioOpus24Kbps;
+
+  /// No description provided for @audioOnlyOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Only option'**
+  String get audioOnlyOption;
+
+  /// No description provided for @audioStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Audio'**
+  String get audioStop;
+
+  /// No description provided for @audioStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Audio'**
+  String get audioStart;
+
+  /// No description provided for @audioLiveStats.
+  ///
+  /// In en, this message translates to:
+  /// **'Live Stats'**
+  String get audioLiveStats;
+
+  /// No description provided for @audioState.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get audioState;
+
+  /// No description provided for @audioBitrate.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitrate'**
+  String get audioBitrate;
+
+  /// No description provided for @audioBuffer.
+  ///
+  /// In en, this message translates to:
+  /// **'Buffer'**
+  String get audioBuffer;
+
+  /// No description provided for @audioDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Dropped'**
+  String get audioDropped;
+
+  /// No description provided for @audioFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'Frames'**
+  String get audioFrames;
+
+  /// No description provided for @audioLatency.
+  ///
+  /// In en, this message translates to:
+  /// **'Latency'**
+  String get audioLatency;
+
+  /// No description provided for @audioStateReceiveReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive ready'**
+  String get audioStateReceiveReady;
+
+  /// No description provided for @audioStateOfferSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer sent'**
+  String get audioStateOfferSent;
+
+  /// No description provided for @audioStateConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get audioStateConnecting;
+
+  /// No description provided for @audioStateStreaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming'**
+  String get audioStateStreaming;
+
+  /// No description provided for @audioStateIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle'**
+  String get audioStateIdle;
+
+  /// No description provided for @notAvailableShort.
+  ///
+  /// In en, this message translates to:
+  /// **'N/A'**
+  String get notAvailableShort;
+
+  /// No description provided for @kbpsUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'kbps'**
+  String get kbpsUnit;
 }
 
 class _AppLocalizationsDelegate

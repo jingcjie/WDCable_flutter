@@ -162,6 +162,28 @@ class ProtocolCodecTest {
     }
 
     @Test
+    fun audioFrameRoundTrip() {
+        val frame = ProtocolFrame(
+            type = ProtocolFrameType.AUDIO_FRAME,
+            channel = ProtocolChannel.AUDIO,
+            streamId = 42L,
+            sequenceNumber = 7L,
+            metadataJson = """{"codec":"opus","durationMs":20}""",
+            payload = byteArrayOf(11, 12, 13)
+        )
+
+        val decoded = ProtocolCodec.readFrame(ByteArrayInputStream(ProtocolCodec.encode(frame)))
+
+        require(decoded != null)
+        assertEquals(ProtocolFrameType.AUDIO_FRAME, decoded.type)
+        assertEquals(ProtocolChannel.AUDIO, decoded.channel)
+        assertEquals(42L, decoded.streamId)
+        assertEquals(7L, decoded.sequenceNumber)
+        assertEquals(frame.metadataJson, decoded.metadataJson)
+        assertArrayEquals(frame.payload, decoded.payload)
+    }
+
+    @Test
     fun jsonMetadataRoundTripPreservesUtf8() {
         val metadata = """{"deviceName":"Pixel 8","message":"hello \uD83D\uDC4B"}"""
 

@@ -9,6 +9,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.example.wifi_direct_cable.audio.AudioService
 import com.example.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.example.wifi_direct_cable.session.SessionManager
 import io.flutter.plugin.common.MethodCall
@@ -23,6 +24,7 @@ class FlutterMethodChannelHandler(
     private val chatService: ChatService,
     private val speedTestService: SpeedTestService,
     private val fileTransferService: FileTransferService,
+    private val audioService: AudioService,
     private val permissionManager: PermissionManager
 ) : MethodChannel.MethodCallHandler {
     
@@ -99,6 +101,18 @@ class FlutterMethodChannelHandler(
             "sendSpeedTestData" -> {
                 val sizeBytes = (call.argument<Any>("sizeBytes") as? Number)?.toLong() ?: 1048576L
                 speedTestService.sendSpeedTestData(sizeBytes, result)
+            }
+            "getAudioSupport" -> {
+                result.success(audioService.getAudioSupport())
+            }
+            "startAudio" -> {
+                val mode = call.argument<String>("mode")
+                val source = call.argument<String>("source")
+                val encoding = call.argument<String>("encoding")
+                audioService.startAudio(mode, source, encoding, result)
+            }
+            "stopAudio" -> {
+                audioService.stopAudio(result)
             }
             "pickFile" -> {
                 fileTransferService.pickFile(result)
@@ -182,6 +196,7 @@ class FlutterMethodChannelHandler(
             "chatServerRunning" to (stats["controlChannelOpen"] as? Boolean ?: false),
             "speedTestServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
             "fileTransferServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
+            "audioChannelOpen" to (stats["audioChannelOpen"] as? Boolean ?: false),
             "sessionState" to (stats["sessionState"] as? String ?: "Disconnected"),
             "sessionId" to (stats["sessionId"] as? String ?: ""),
             "sessionReady" to (stats["isReady"] as? Boolean ?: false),
@@ -190,6 +205,7 @@ class FlutterMethodChannelHandler(
             "connectedClientsCount" to if (isConnected) 1 else 0,
             "locationPermissionGranted" to permissionManager.hasLocationPermission(),
             "nearbyWifiDevicesPermissionGranted" to permissionManager.hasNearbyWifiDevicesPermission(),
+            "recordAudioPermissionGranted" to permissionManager.hasRecordAudioPermission(),
             "storageAccessMode" to "system_picker",
             "timestamp" to System.currentTimeMillis()
         )

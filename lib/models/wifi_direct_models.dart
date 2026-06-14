@@ -255,6 +255,99 @@ class FileTransferInfo {
   }
 }
 
+class AudioLinkStats {
+  final int bitrateBps;
+  final int bufferLevelMs;
+  final int framesSent;
+  final int framesReceived;
+  final int droppedFrames;
+  final int underflowCount;
+  final int latencyMs;
+
+  const AudioLinkStats({
+    this.bitrateBps = 0,
+    this.bufferLevelMs = 0,
+    this.framesSent = 0,
+    this.framesReceived = 0,
+    this.droppedFrames = 0,
+    this.underflowCount = 0,
+    this.latencyMs = -1,
+  });
+
+  AudioLinkStats copyWith({
+    int? bitrateBps,
+    int? bufferLevelMs,
+    int? framesSent,
+    int? framesReceived,
+    int? droppedFrames,
+    int? underflowCount,
+    int? latencyMs,
+  }) {
+    return AudioLinkStats(
+      bitrateBps: bitrateBps ?? this.bitrateBps,
+      bufferLevelMs: bufferLevelMs ?? this.bufferLevelMs,
+      framesSent: framesSent ?? this.framesSent,
+      framesReceived: framesReceived ?? this.framesReceived,
+      droppedFrames: droppedFrames ?? this.droppedFrames,
+      underflowCount: underflowCount ?? this.underflowCount,
+      latencyMs: latencyMs ?? this.latencyMs,
+    );
+  }
+}
+
+class AudioSupportInfo {
+  final bool audioLinkSupported;
+  final bool canSend;
+  final bool canReceive;
+  final String codec;
+  final String source;
+  final int sampleRate;
+  final int channels;
+  final int frameDurationMs;
+  final int bitrateBps;
+  final int requiresApiForSend;
+  final int androidApi;
+  final String message;
+
+  const AudioSupportInfo({
+    this.audioLinkSupported = false,
+    this.canSend = false,
+    this.canReceive = false,
+    this.codec = 'opus',
+    this.source = 'microphone',
+    this.sampleRate = 48000,
+    this.channels = 1,
+    this.frameDurationMs = 20,
+    this.bitrateBps = 24000,
+    this.requiresApiForSend = 29,
+    this.androidApi = 0,
+    this.message = '',
+  });
+
+  factory AudioSupportInfo.fromMap(Map<String, dynamic> map) {
+    return AudioSupportInfo(
+      audioLinkSupported: map['audioLinkSupported'] == true,
+      canSend: map['canSend'] == true,
+      canReceive: map['canReceive'] == true,
+      codec: map['codec']?.toString() ?? 'opus',
+      source: map['source']?.toString() ?? 'microphone',
+      sampleRate: _intFromMap(map['sampleRate'], 48000),
+      channels: _intFromMap(map['channels'], 1),
+      frameDurationMs: _intFromMap(map['frameDurationMs'], 20),
+      bitrateBps: _intFromMap(map['bitrateBps'], 24000),
+      requiresApiForSend: _intFromMap(map['requiresApiForSend'], 29),
+      androidApi: _intFromMap(map['androidApi'], 0),
+      message: map['message']?.toString() ?? '',
+    );
+  }
+}
+
+int _intFromMap(Object? value, int fallback) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
 class WiFiDirectState {
   final bool isWifiP2pEnabled;
   final bool isDiscovering;
@@ -268,12 +361,23 @@ class WiFiDirectState {
   final String? sessionRole;
   final String? disconnectReason;
   final List<String> logs;
+  final List<String> sessionCapabilities;
+  final List<String> peerCapabilities;
   final List<ChatMessage> chatMessages;
   final SpeedTestResult? lastSpeedTest;
   final bool isSpeedTesting;
   final List<SpeedTestResult> speedTestResults;
   final FileTransferInfo? currentFileTransfer;
   final List<FileTransferInfo> recentFileTransfers;
+  final AudioSupportInfo audioSupport;
+  final String audioMode;
+  final String audioSource;
+  final String audioEncoding;
+  final String audioState;
+  final bool audioPeerReady;
+  final int? audioStreamId;
+  final AudioLinkStats audioStats;
+  final String? audioLastError;
 
   WiFiDirectState({
     this.isWifiP2pEnabled = false,
@@ -288,12 +392,23 @@ class WiFiDirectState {
     this.sessionRole,
     this.disconnectReason,
     this.logs = const [],
+    this.sessionCapabilities = const [],
+    this.peerCapabilities = const [],
     this.chatMessages = const [],
     this.lastSpeedTest,
     this.isSpeedTesting = false,
     this.speedTestResults = const [],
     this.currentFileTransfer,
     this.recentFileTransfers = const [],
+    this.audioSupport = const AudioSupportInfo(),
+    this.audioMode = 'receive',
+    this.audioSource = 'microphone',
+    this.audioEncoding = 'opus',
+    this.audioState = 'idle',
+    this.audioPeerReady = false,
+    this.audioStreamId,
+    this.audioStats = const AudioLinkStats(),
+    this.audioLastError,
   });
 
   WiFiDirectState copyWith({
@@ -309,12 +424,23 @@ class WiFiDirectState {
     Object? sessionRole = _unset,
     Object? disconnectReason = _unset,
     List<String>? logs,
+    List<String>? sessionCapabilities,
+    List<String>? peerCapabilities,
     List<ChatMessage>? chatMessages,
     Object? lastSpeedTest = _unset,
     bool? isSpeedTesting,
     List<SpeedTestResult>? speedTestResults,
     Object? currentFileTransfer = _unset,
     List<FileTransferInfo>? recentFileTransfers,
+    AudioSupportInfo? audioSupport,
+    String? audioMode,
+    String? audioSource,
+    String? audioEncoding,
+    String? audioState,
+    bool? audioPeerReady,
+    Object? audioStreamId = _unset,
+    AudioLinkStats? audioStats,
+    Object? audioLastError = _unset,
   }) {
     return WiFiDirectState(
       isWifiP2pEnabled: isWifiP2pEnabled ?? this.isWifiP2pEnabled,
@@ -339,6 +465,8 @@ class WiFiDirectState {
           ? this.disconnectReason
           : disconnectReason as String?,
       logs: logs ?? this.logs,
+      sessionCapabilities: sessionCapabilities ?? this.sessionCapabilities,
+      peerCapabilities: peerCapabilities ?? this.peerCapabilities,
       chatMessages: chatMessages ?? this.chatMessages,
       lastSpeedTest: identical(lastSpeedTest, _unset)
           ? this.lastSpeedTest
@@ -349,10 +477,31 @@ class WiFiDirectState {
           ? this.currentFileTransfer
           : currentFileTransfer as FileTransferInfo?,
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
+      audioSupport: audioSupport ?? this.audioSupport,
+      audioMode: audioMode ?? this.audioMode,
+      audioSource: audioSource ?? this.audioSource,
+      audioEncoding: audioEncoding ?? this.audioEncoding,
+      audioState: audioState ?? this.audioState,
+      audioPeerReady: audioPeerReady ?? this.audioPeerReady,
+      audioStreamId: identical(audioStreamId, _unset)
+          ? this.audioStreamId
+          : audioStreamId as int?,
+      audioStats: audioStats ?? this.audioStats,
+      audioLastError: identical(audioLastError, _unset)
+          ? this.audioLastError
+          : audioLastError as String?,
     );
   }
 
   bool get hasWifiDirectLink => connectionInfo?.isConnected == true;
 
   bool get isSessionReady => sessionState == 'Ready';
+
+  bool get peerSupportsAudio =>
+      peerCapabilities.contains('audio.link') &&
+      peerCapabilities.contains('audio.codec.opus');
+
+  bool get isAudioActive => audioState != 'idle';
+
+  bool get isAudioStreaming => audioState == 'streaming';
 }
