@@ -275,7 +275,7 @@ class _AudioTabState extends State<AudioTab> {
               crossAxisCount: 2,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 2.7,
+              childAspectRatio: 2.2,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
               children: [
@@ -315,7 +315,7 @@ class _AudioTabState extends State<AudioTab> {
 
   Widget _buildStatTile(String label, String value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),

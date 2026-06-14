@@ -41,6 +41,7 @@ class AudioService(
     private val permissionManager: PermissionManager
 ) : AudioSessionHandler {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val controlExecutor = Executors.newSingleThreadExecutor()
     private val statsExecutor = Executors.newSingleThreadScheduledExecutor()
     private val stateLock = Any()
     private val running = AtomicBoolean(false)
@@ -158,24 +159,34 @@ class AudioService(
     }
 
     fun stopAudio(result: MethodChannel.Result? = null) {
-        val currentStreamId = streamId
-        try {
-            if (currentStreamId != 0L && state != STATE_IDLE) {
-                sessionManager.sendAudioControl(AudioProtocol.stop(currentStreamId, "local_stop"))
+        controlExecutor.execute {
+            val currentStreamId = streamId
+            try {
+                if (currentStreamId != 0L && state != STATE_IDLE) {
+                    sessionManager.sendAudioControl(AudioProtocol.stop(currentStreamId, "local_stop"))
+                }
+                if (mode == MODE_RECEIVE) {
+                    sessionManager.sendAudioControl(AudioProtocol.receiveStopped(currentStreamId))
+                }
+            } catch (exception: Exception) {
+                DiagnosticsLogger.log(
+                    "audio",
+                    "Audio stop control send failed",
+                    mapOf(
+                        "errorType" to exception.javaClass.simpleName,
+                        "error" to exception.message
+                    )
+                )
+            } finally {
+                cleanupLocal("stopped", emitStopped = true)
+                result?.successOnMain("Audio stopped")
             }
-            if (mode == MODE_RECEIVE) {
-                sessionManager.sendAudioControl(AudioProtocol.receiveStopped(currentStreamId))
-            }
-        } catch (exception: Exception) {
-            DiagnosticsLogger.log("audio", "Audio stop control send failed", mapOf("error" to exception.message))
-        } finally {
-            cleanupLocal("stopped", emitStopped = true)
-            result?.success("Audio stopped")
         }
     }
 
     fun cleanup() {
         cleanupLocal("service_cleanup", emitStopped = false)
+        controlExecutor.shutdownNow()
         statsExecutor.shutdownNow()
     }
 
@@ -256,13 +267,19 @@ class AudioService(
             listenerStarted = false
         }
         resetStats()
-        try {
-            sessionManager.sendAudioControl(AudioProtocol.receiveReady(0L))
-            emitAudioState(STATE_RECEIVE_READY, "Ready to receive microphone audio")
-            result.success("Audio receive mode started")
-        } catch (exception: Exception) {
-            cleanupLocal("receive_ready_failed", emitStopped = true)
-            result.error(AudioProtocol.ERROR_TRANSPORT_FAILED, "Failed to send receive-ready message: ${exception.message}", null)
+        controlExecutor.execute {
+            try {
+                sessionManager.sendAudioControl(AudioProtocol.receiveReady(0L))
+                emitAudioState(STATE_RECEIVE_READY, "Ready to receive microphone audio")
+                result.successOnMain("Audio receive mode started")
+            } catch (exception: Exception) {
+                cleanupLocal("receive_ready_failed", emitStopped = true)
+                result.errorOnMain(
+                    AudioProtocol.ERROR_TRANSPORT_FAILED,
+                    "Failed to send receive-ready message: ${exception.describe()}",
+                    null
+                )
+            }
         }
     }
 
@@ -280,13 +297,19 @@ class AudioService(
             listenerStarted = false
         }
         resetStats()
-        try {
-            sessionManager.sendAudioControl(AudioProtocol.offer(newStreamId, newOfferId))
-            emitAudioState(STATE_OFFER_SENT, "Audio offer sent")
-            result.success("Audio send offer sent")
-        } catch (exception: Exception) {
-            cleanupLocal("offer_failed", emitStopped = true)
-            result.error(AudioProtocol.ERROR_TRANSPORT_FAILED, "Failed to send audio offer: ${exception.message}", null)
+        controlExecutor.execute {
+            try {
+                sessionManager.sendAudioControl(AudioProtocol.offer(newStreamId, newOfferId))
+                emitAudioState(STATE_OFFER_SENT, "Audio offer sent")
+                result.successOnMain("Audio send offer sent")
+            } catch (exception: Exception) {
+                cleanupLocal("offer_failed", emitStopped = true)
+                result.errorOnMain(
+                    AudioProtocol.ERROR_TRANSPORT_FAILED,
+                    "Failed to send audio offer: ${exception.describe()}",
+                    null
+                )
+            }
         }
     }
 
@@ -765,6 +788,22 @@ class AudioService(
         mainHandler.post {
             invokeMethod(method, arguments)
         }
+    }
+
+    private fun MethodChannel.Result.successOnMain(value: Any?) {
+        mainHandler.post {
+            success(value)
+        }
+    }
+
+    private fun MethodChannel.Result.errorOnMain(code: String, message: String, details: Any?) {
+        mainHandler.post {
+            error(code, message, details)
+        }
+    }
+
+    private fun Exception.describe(): String {
+        return message ?: javaClass.simpleName
     }
 
     companion object {
