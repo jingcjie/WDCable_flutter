@@ -25,6 +25,7 @@ import com.example.wifi_direct_cable.session.SessionRole
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -226,11 +227,14 @@ class AudioService(
                 sequenceNumber = frame.sequenceNumber,
                 sentAtMs = metadata.optLong("sentAtMs", System.currentTimeMillis()),
                 durationMs = metadata.optInt("durationMs", AudioProtocol.FRAME_DURATION_MS),
-                payload = frame.payload
+                payload = frame.payload,
+                codecConfig = metadata.optBoolean("codecConfig", false)
             )
         )
-        bytesReceived.addAndGet(frame.payload.size.toLong())
-        framesReceived.incrementAndGet()
+        if (!metadata.optBoolean("codecConfig", false)) {
+            bytesReceived.addAndGet(frame.payload.size.toLong())
+            framesReceived.incrementAndGet()
+        }
     }
 
     override fun onAudioFeatureError(code: String, message: String, streamId: Long) {
@@ -535,27 +539,53 @@ class AudioService(
         val bufferInfo = MediaCodec.BufferInfo()
         while (true) {
             val outputIndex = encoder.dequeueOutputBuffer(bufferInfo, 0)
+            if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                sendCodecSpecificData(encoder.outputFormat)
+                continue
+            }
             if (outputIndex < 0) return
             try {
-                if (bufferInfo.size > 0 && (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                if (bufferInfo.size > 0) {
                     val outputBuffer = encoder.getOutputBuffer(outputIndex) ?: return
                     val packet = ByteArray(bufferInfo.size)
                     outputBuffer.position(bufferInfo.offset)
                     outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
                     outputBuffer.get(packet)
+                    val codecConfig =
+                        (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
                     val sentAtMs = System.currentTimeMillis()
                     sessionManager.writeAudioFrame(
                         streamId = streamId,
                         sequenceNumber = audioSequence.incrementAndGet(),
-                        metadata = AudioProtocol.frameMetadata(sentAtMs),
+                        metadata = AudioProtocol.frameMetadata(sentAtMs, codecConfig),
                         payload = packet
                     )
-                    bytesSent.addAndGet(packet.size.toLong())
-                    framesSent.incrementAndGet()
+                    if (!codecConfig) {
+                        bytesSent.addAndGet(packet.size.toLong())
+                        framesSent.incrementAndGet()
+                    }
                 }
             } finally {
                 encoder.releaseOutputBuffer(outputIndex, false)
             }
+        }
+    }
+
+    private fun sendCodecSpecificData(format: MediaFormat) {
+        for (index in 0..2) {
+            val key = "csd-$index"
+            if (!format.containsKey(key)) continue
+            val buffer = format.getByteBuffer(key) ?: continue
+            val duplicate = buffer.duplicate()
+            duplicate.position(0)
+            val packet = ByteArray(duplicate.remaining())
+            duplicate.get(packet)
+            sessionManager.writeAudioFrame(
+                streamId = streamId,
+                sequenceNumber = audioSequence.incrementAndGet(),
+                metadata = AudioProtocol.frameMetadata(System.currentTimeMillis(), codecConfig = true),
+                payload = packet
+            )
         }
     }
 
@@ -591,37 +621,44 @@ class AudioService(
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
 
-            val format = MediaFormat.createAudioFormat(
-                MediaFormat.MIMETYPE_AUDIO_OPUS,
-                AudioProtocol.SAMPLE_RATE,
-                AudioProtocol.CHANNELS
-            )
-            decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_OPUS)
-            decoder.configure(format, null, null, 0)
-            decoder.start()
             audioTrack.play()
 
             var presentationTimeUs = 0L
+            val codecSpecificData = mutableListOf<ByteArray>()
             while (running.get()) {
                 val encodedFrame = jitterBuffer.pollReady()
                 if (encodedFrame == null) {
                     Thread.sleep(5)
-                    drainDecoder(decoder, audioTrack)
+                    decoder?.let { drainDecoder(it, audioTrack) }
                     continue
+                }
+                if (encodedFrame.codecConfig && decoder == null) {
+                    codecSpecificData.add(encodedFrame.payload)
+                    continue
+                }
+                if (decoder == null) {
+                    decoder = createOpusDecoder(codecSpecificData)
                 }
                 val inputIndex = decoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
                 if (inputIndex >= 0) {
                     val inputBuffer = decoder.getInputBuffer(inputIndex)
                     inputBuffer?.clear()
                     inputBuffer?.put(encodedFrame.payload)
+                    val flags = if (encodedFrame.codecConfig) {
+                        MediaCodec.BUFFER_FLAG_CODEC_CONFIG
+                    } else {
+                        0
+                    }
                     decoder.queueInputBuffer(
                         inputIndex,
                         0,
                         encodedFrame.payload.size,
                         presentationTimeUs,
-                        0
+                        flags
                     )
-                    presentationTimeUs += encodedFrame.durationMs * 1000L
+                    if (!encodedFrame.codecConfig) {
+                        presentationTimeUs += encodedFrame.durationMs * 1000L
+                    }
                 } else {
                     extraDroppedFrames.incrementAndGet()
                 }
@@ -648,6 +685,23 @@ class AudioService(
                 decoder?.release()
             } catch (_: Exception) {
             }
+        }
+    }
+
+    private fun createOpusDecoder(codecSpecificData: List<ByteArray>): MediaCodec {
+        val format = MediaFormat.createAudioFormat(
+            MediaFormat.MIMETYPE_AUDIO_OPUS,
+            AudioProtocol.SAMPLE_RATE,
+            AudioProtocol.CHANNELS
+        )
+        codecSpecificData.forEachIndexed { index, data ->
+            if (data.isNotEmpty()) {
+                format.setByteBuffer("csd-$index", ByteBuffer.wrap(data))
+            }
+        }
+        return MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_OPUS).also { decoder ->
+            decoder.configure(format, null, null, 0)
+            decoder.start()
         }
     }
 

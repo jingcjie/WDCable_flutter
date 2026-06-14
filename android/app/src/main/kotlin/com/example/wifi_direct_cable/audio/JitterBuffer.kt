@@ -6,7 +6,8 @@ data class EncodedAudioFrame(
     val sequenceNumber: Long,
     val sentAtMs: Long,
     val durationMs: Int,
-    val payload: ByteArray
+    val payload: ByteArray,
+    val codecConfig: Boolean = false
 )
 
 data class JitterBufferSnapshot(
@@ -46,7 +47,7 @@ class JitterBuffer(
             if (bufferLevelLocked() < targetBufferMs && lastPoppedSequence == Long.MIN_VALUE) {
                 return null
             }
-            val first = frames.pollFirstEntry().value
+            val first = frames.pollFirstEntry()?.value ?: return null
             lastPoppedSequence = first.sequenceNumber
             return first
         }

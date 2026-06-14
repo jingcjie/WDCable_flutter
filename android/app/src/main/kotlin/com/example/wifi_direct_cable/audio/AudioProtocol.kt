@@ -55,10 +55,11 @@ object AudioProtocol {
     fun stop(streamId: Long, reason: String): JSONObject = base(KIND_STOP, streamId)
         .put("reason", reason)
 
-    fun frameMetadata(sentAtMs: Long): JSONObject = JSONObject()
+    fun frameMetadata(sentAtMs: Long, codecConfig: Boolean = false): JSONObject = JSONObject()
         .put("codec", CODEC_OPUS)
         .put("sentAtMs", sentAtMs)
-        .put("durationMs", FRAME_DURATION_MS)
+        .put("durationMs", if (codecConfig) 0 else FRAME_DURATION_MS)
+        .put("codecConfig", codecConfig)
 
     fun parseOffer(metadata: JSONObject): AudioOffer {
         requireKind(metadata, KIND_OFFER)
