@@ -74,6 +74,45 @@ class ProtocolCodecTest {
     }
 
     @Test
+    fun invalidHeaderSizeThrowsTypedError() {
+        val header = headerWithLengths(
+            metadataLength = 0,
+            payloadLength = 0,
+            headerSize = ProtocolConstants.HEADER_SIZE + 1
+        )
+
+        assertProtocolError(ProtocolError.INVALID_HEADER_SIZE) {
+            ProtocolCodec.readFrame(ByteArrayInputStream(header))
+        }
+    }
+
+    @Test
+    fun unknownFrameTypeThrowsTypedError() {
+        val header = headerWithLengths(
+            metadataLength = 0,
+            payloadLength = 0,
+            frameType = 999
+        )
+
+        assertProtocolError(ProtocolError.INVALID_FRAME_TYPE) {
+            ProtocolCodec.readFrame(ByteArrayInputStream(header))
+        }
+    }
+
+    @Test
+    fun unknownChannelThrowsTypedError() {
+        val header = headerWithLengths(
+            metadataLength = 0,
+            payloadLength = 0,
+            channel = 999
+        )
+
+        assertProtocolError(ProtocolError.INVALID_CHANNEL) {
+            ProtocolCodec.readFrame(ByteArrayInputStream(header))
+        }
+    }
+
+    @Test
     fun unsupportedVersionThrowsTypedError() {
         val encoded = ProtocolCodec.encode(
             ProtocolFrame(
@@ -111,6 +150,30 @@ class ProtocolCodecTest {
         )
 
         assertProtocolError(ProtocolError.METADATA_TOO_LARGE) {
+            ProtocolCodec.readFrame(ByteArrayInputStream(header))
+        }
+    }
+
+    @Test
+    fun negativeMetadataLengthRejectedOnDecode() {
+        val header = headerWithLengths(
+            metadataLength = -1,
+            payloadLength = 0
+        )
+
+        assertProtocolError(ProtocolError.INVALID_LENGTH) {
+            ProtocolCodec.readFrame(ByteArrayInputStream(header))
+        }
+    }
+
+    @Test
+    fun negativePayloadLengthRejectedOnDecode() {
+        val header = headerWithLengths(
+            metadataLength = 0,
+            payloadLength = -1
+        )
+
+        assertProtocolError(ProtocolError.INVALID_LENGTH) {
             ProtocolCodec.readFrame(ByteArrayInputStream(header))
         }
     }
@@ -219,15 +282,21 @@ class ProtocolCodecTest {
         }
     }
 
-    private fun headerWithLengths(metadataLength: Int, payloadLength: Int): ByteArray {
+    private fun headerWithLengths(
+        metadataLength: Int,
+        payloadLength: Int,
+        headerSize: Int = ProtocolConstants.HEADER_SIZE,
+        frameType: Int = ProtocolFrameType.CONTROL_MESSAGE.id,
+        channel: Int = ProtocolChannel.CONTROL.id
+    ): ByteArray {
         return ByteBuffer.allocate(ProtocolConstants.HEADER_SIZE)
             .order(ByteOrder.BIG_ENDIAN)
             .putInt(ProtocolConstants.MAGIC)
             .putShort(ProtocolConstants.VERSION.toShort())
-            .putShort(ProtocolConstants.HEADER_SIZE.toShort())
-            .putShort(ProtocolFrameType.CONTROL_MESSAGE.id.toShort())
+            .putShort(headerSize.toShort())
+            .putShort(frameType.toShort())
             .putShort(0)
-            .putShort(ProtocolChannel.CONTROL.id.toShort())
+            .putShort(channel.toShort())
             .putShort(0)
             .putLong(0L)
             .putLong(0L)

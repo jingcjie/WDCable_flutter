@@ -3,14 +3,8 @@
     <!-- Internal storage -->
     <files-path name="internal_files" path="." />
     
-    <!-- External storage -->
+    <!-- App-private external storage -->
     <external-files-path name="external_files" path="." />
-    
-    <!-- Downloads directory -->
-    <external-path name="external_downloads" path="Download/" />
-    
-    <!-- Documents directory -->
-    <external-path name="external_documents" path="Documents/" />
     
     <!-- Cache directory -->
     <cache-path name="cache" path="." />

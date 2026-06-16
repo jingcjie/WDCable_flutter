@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wifi_direct_cable/controllers/wifi_direct_controller.dart';
 import 'package:wifi_direct_cable/models/wifi_direct_models.dart';
@@ -210,6 +211,55 @@ void main() {
     });
 
     test(
+      'disconnect clears active transfer and audio state',
+      () async {
+        service.emit(
+          ConnectionChangedEvent(
+            WiFiDirectConnectionInfo(
+              isConnected: true,
+              isGroupOwner: false,
+              groupOwnerAddress: '192.168.49.1',
+            ),
+          ),
+        );
+        service.emit(FileReceiveStartedEvent('sample.txt', 128));
+        service.emit(
+          AudioStateChangedEvent(
+            mode: 'receive',
+            state: 'streaming',
+            streamId: 7,
+            source: 'microphone',
+            encoding: 'opus',
+            peerReady: true,
+            isStreaming: true,
+            message: 'Audio Link streaming',
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.currentFileTransfer, isNotNull);
+        expect(controller.currentState.audioState, 'streaming');
+
+        service.emit(
+          ConnectionChangedEvent(
+            WiFiDirectConnectionInfo(
+              isConnected: false,
+              isGroupOwner: false,
+              groupOwnerAddress: null,
+            ),
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.connectionInfo, isNull);
+        expect(controller.currentState.sessionState, 'Disconnected');
+        expect(controller.currentState.currentFileTransfer, isNull);
+        expect(controller.currentState.audioState, 'idle');
+        expect(controller.currentState.audioStreamId, isNull);
+      },
+    );
+
+    test(
       'chat send waits for session ready after Wi-Fi Direct connects',
       () async {
         service.emit(
@@ -271,6 +321,78 @@ void main() {
         controller.currentState.logs.last,
         contains('not running the upgraded WDCable protocol'),
       );
+    });
+
+    test(
+      'session failure clears feature state and blocks false ready UI',
+      () async {
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-failure',
+            role: 'client',
+            protocolVersion: 1,
+            capabilities: const ['control.chat', 'audio.link', 'audio.codec.opus'],
+            peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+          ),
+        );
+        service.emit(FileReceiveStartedEvent('active.bin', 256));
+        service.emit(
+          AudioStateChangedEvent(
+            mode: 'send',
+            state: 'streaming',
+            streamId: 9,
+            source: 'microphone',
+            encoding: 'opus',
+            peerReady: true,
+            isStreaming: true,
+            message: 'Audio Link streaming',
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.isSessionReady, isTrue);
+        expect(controller.currentState.currentFileTransfer, isNotNull);
+        expect(controller.currentState.audioState, 'streaming');
+
+        service.emit(
+          SessionFailedEvent(
+            reason: 'heartbeat_timeout',
+            message: 'Heartbeat timed out',
+            sessionId: 'session-failure',
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.sessionState, 'Failed');
+        expect(controller.currentState.isSessionReady, isFalse);
+        expect(controller.currentState.currentFileTransfer, isNull);
+        expect(controller.currentState.isSpeedTesting, isFalse);
+        expect(controller.currentState.audioState, 'idle');
+        expect(controller.currentState.audioStreamId, isNull);
+        expect(controller.currentState.audioPeerReady, isFalse);
+      },
+    );
+
+    test('permission denial clears pending connection state', () async {
+      final peer = WiFiDirectDevice(
+        deviceName: 'Peer',
+        deviceAddress: 'aa:bb:cc:dd:ee:ff',
+        status: 3,
+      );
+
+      await controller.connectToPeer(peer);
+      await pumpEventQueue();
+
+      expect(controller.currentState.isConnecting, isTrue);
+      expect(controller.currentState.pendingPeerAddress, peer.deviceAddress);
+
+      service.emit(PermissionDeniedEvent(const ['Nearby Wi-Fi devices']));
+      await pumpEventQueue();
+
+      expect(controller.currentState.isWifiP2pEnabled, isFalse);
+      expect(controller.currentState.isDiscovering, isFalse);
+      expect(controller.currentState.isConnecting, isFalse);
+      expect(controller.currentState.pendingPeerAddress, isNull);
     });
 
     test(
@@ -467,7 +589,93 @@ void main() {
       expect(service.audioStartCalls, 1);
       expect(service.lastAudioMode, 'receive');
     });
+
+    test('ignores duplicate file received completion events', () async {
+      service.emit(FileReceiveStartedEvent('sample.txt', 128));
+      service.emit(
+        FileReceivedEvent('sample.txt', filePath: '/tmp/sample.txt'),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.recentFileTransfers, hasLength(1));
+
+      service.emit(
+        FileReceivedEvent('sample.txt', filePath: '/tmp/sample.txt'),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.recentFileTransfers, hasLength(1));
+      expect(
+        controller.currentState.recentFileTransfers.first.filePath,
+        '/tmp/sample.txt',
+      );
+    });
   });
+
+  group('WiFiDirectService bridge parsing', () {
+    test('emits typed events from platform method calls with coercion', () async {
+      final service = WiFiDirectService();
+      final events = <WiFiDirectEvent>[];
+      final subscription = service.eventStream.listen(events.add);
+
+      await _invokePlatformEvent(
+        'onAudioStats',
+        <String, Object?>{
+          'mode': 'receive',
+          'state': 'streaming',
+          'streamId': '42',
+          'bitrateBps': 24000.0,
+          'bufferLevelMs': '80',
+          'framesSent': 1,
+          'framesReceived': '2',
+          'droppedFrames': 0,
+          'underflowCount': '3',
+          'latencyMs': -1,
+        },
+      );
+      await pumpEventQueue();
+
+      expect(events, hasLength(1));
+      final stats = events.single as AudioStatsEvent;
+      expect(stats.streamId, 42);
+      expect(stats.bufferLevelMs, 80);
+      expect(stats.framesReceived, 2);
+      expect(stats.underflowCount, 3);
+
+      await subscription.cancel();
+      service.dispose();
+    });
+
+    test('malformed platform payload is surfaced as ErrorEvent', () async {
+      final service = WiFiDirectService();
+      final events = <WiFiDirectEvent>[];
+      final subscription = service.eventStream.listen(events.add);
+
+      await _invokePlatformEvent('onSessionReady', 'not a map');
+      await pumpEventQueue();
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<ErrorEvent>());
+      expect((events.single as ErrorEvent).error, contains('Error handling'));
+
+      await subscription.cancel();
+      service.dispose();
+    });
+  });
+}
+
+Future<void> _invokePlatformEvent(String method, Object? arguments) async {
+  final binding = TestDefaultBinaryMessengerBinding.instance;
+  const codec = StandardMethodCodec();
+  final completer = Completer<void>();
+  await binding.defaultBinaryMessenger.handlePlatformMessage(
+    'wifi_direct_cable',
+    codec.encodeMethodCall(MethodCall(method, arguments)),
+    (ByteData? data) {
+      completer.complete();
+    },
+  );
+  await completer.future;
 }
 
 class _FakeWiFiDirectService extends WiFiDirectService {

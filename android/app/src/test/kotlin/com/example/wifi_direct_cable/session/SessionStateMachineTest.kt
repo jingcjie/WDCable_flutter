@@ -81,4 +81,28 @@ class SessionStateMachineTest {
         assertFalse(SessionStateMachine.canTransition(SessionPhase.CONNECTING_TRANSPORT, SessionPhase.DEGRADED))
         assertTrue(SessionStateMachine.canTransition(SessionPhase.CONNECTING_TRANSPORT, SessionPhase.FAILED))
     }
+
+    @Test
+    fun degradedCannotStartOverWithoutDisconnectOrRecovery() {
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.DEGRADED, SessionPhase.WIFI_DIRECT_CONNECTED))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.DEGRADED, SessionPhase.HANDSHAKING))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.DEGRADED, SessionPhase.READY))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.DEGRADED, SessionPhase.DISCONNECTING))
+    }
+
+    @Test
+    fun disconnectingCannotReturnToReady() {
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.DISCONNECTING, SessionPhase.READY))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.DISCONNECTING, SessionPhase.WIFI_DIRECT_CONNECTED))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.DISCONNECTING, SessionPhase.DISCONNECTED))
+    }
+
+    @Test
+    fun failedCanOnlyDisconnectOrStartFreshWifiDirectSession() {
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.DISCONNECTING))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.DISCONNECTED))
+        assertTrue(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.WIFI_DIRECT_CONNECTED))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.HANDSHAKING))
+        assertFalse(SessionStateMachine.canTransition(SessionPhase.FAILED, SessionPhase.READY))
+    }
 }

@@ -1536,34 +1536,10 @@ class SessionManager(
     private fun duplicateSafeFile(safeFileName: String): File {
         val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: File(context.filesDir, "downloads")
-        if (!directory.exists()) {
-            directory.mkdirs()
-        }
-        val baseName = safeFileName.substringBeforeLast('.', safeFileName)
-        val extension = safeFileName.substringAfterLast('.', "")
-        var candidate = File(directory, safeFileName)
-        var index = 1
-        while (candidate.exists()) {
-            val nextName = if (extension.isBlank()) {
-                "$baseName ($index)"
-            } else {
-                "$baseName ($index).$extension"
-            }
-            candidate = File(directory, nextName)
-            index++
-        }
-        return candidate
+        return BulkFileNames.duplicateSafeFile(directory, safeFileName)
     }
 
-    private fun safeFileName(fileName: String): String {
-        val sanitized = fileName
-            .substringAfterLast('/')
-            .substringAfterLast('\\')
-            .replace(Regex("[\\r\\n\\u0000]"), "_")
-            .replace(Regex("[<>:\"/\\\\|?*]"), "_")
-            .trim()
-        return sanitized.ifBlank { "unknown_file" }
-    }
+    private fun safeFileName(fileName: String): String = BulkFileNames.safeFileName(fileName)
 
     private fun nextStreamId(): Long = kotlin.math.abs(UUID.randomUUID().mostSignificantBits)
 

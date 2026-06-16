@@ -43,4 +43,39 @@ class AudioProtocolTest {
         } catch (_: IllegalArgumentException) {
         }
     }
+
+    @Test
+    fun wrongMetadataKindIsRejected() {
+        try {
+            AudioProtocol.parseAccept(AudioProtocol.offer(2L, "offer-2"))
+            fail("Expected wrong metadata kind to be rejected")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun missingAcceptFieldsAreRejected() {
+        try {
+            AudioProtocol.parseAccept(
+                JSONObject()
+                    .put("kind", AudioProtocol.KIND_ACCEPT)
+                    .put("streamId", 3L)
+                    .put("codec", AudioProtocol.CODEC_OPUS)
+            )
+            fail("Expected missing offer id to be rejected")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun missingTransportPortDefaultsToInvalidPort() {
+        val transport = AudioProtocol.parseTransport(
+            JSONObject()
+                .put("kind", AudioProtocol.KIND_TRANSPORT)
+                .put("streamId", 4L)
+                .put("transport", AudioProtocol.TRANSPORT_TCP)
+        )
+
+        assertEquals(-1, transport.port)
+    }
 }

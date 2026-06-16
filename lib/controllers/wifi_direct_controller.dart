@@ -67,6 +67,19 @@ class WiFiDirectController {
     _updateState(_stateWithClearedSession());
   }
 
+  WiFiDirectState _stateWithClearedFeatureActivity(WiFiDirectState base) {
+    return base.copyWith(
+      lastSpeedTest: null,
+      isSpeedTesting: false,
+      currentFileTransfer: null,
+      audioState: 'idle',
+      audioPeerReady: false,
+      audioStreamId: null,
+      audioStats: const AudioLinkStats(),
+      audioLastError: null,
+    );
+  }
+
   void _handleEvent(WiFiDirectEvent event) {
     switch (event) {
       case PeersChangedEvent peersEvent:
@@ -159,15 +172,17 @@ class WiFiDirectController {
 
       case SessionFailedEvent failureEvent:
         _updateState(
-          _currentState.copyWith(
-            sessionState: 'Failed',
-            sessionId: failureEvent.sessionId.isEmpty
-                ? _currentState.sessionId
-                : failureEvent.sessionId,
-            disconnectReason: failureEvent.reason,
-            isConnecting: false,
-            pendingPeerAddress: null,
-            isServerStarted: false,
+          _stateWithClearedFeatureActivity(
+            _currentState.copyWith(
+              sessionState: 'Failed',
+              sessionId: failureEvent.sessionId.isEmpty
+                  ? _currentState.sessionId
+                  : failureEvent.sessionId,
+              disconnectReason: failureEvent.reason,
+              isConnecting: false,
+              pendingPeerAddress: null,
+              isServerStarted: false,
+            ),
           ),
         );
         _addLog('Session failed: ${failureEvent.message}');
@@ -175,15 +190,17 @@ class WiFiDirectController {
 
       case PeerProtocolMissingEvent missingEvent:
         _updateState(
-          _currentState.copyWith(
-            sessionState: 'Failed',
-            sessionId: missingEvent.sessionId.isEmpty
-                ? _currentState.sessionId
-                : missingEvent.sessionId,
-            disconnectReason: missingEvent.reason,
-            isConnecting: false,
-            pendingPeerAddress: null,
-            isServerStarted: false,
+          _stateWithClearedFeatureActivity(
+            _currentState.copyWith(
+              sessionState: 'Failed',
+              sessionId: missingEvent.sessionId.isEmpty
+                  ? _currentState.sessionId
+                  : missingEvent.sessionId,
+              disconnectReason: missingEvent.reason,
+              isConnecting: false,
+              pendingPeerAddress: null,
+              isServerStarted: false,
+            ),
           ),
         );
         _addLog(
@@ -265,7 +282,14 @@ class WiFiDirectController {
         final missingCapabilities = permissionEvent.missingCapabilities.isEmpty
             ? 'required Wi-Fi Direct permissions'
             : permissionEvent.missingCapabilities.join(', ');
-        _updateState(_currentState.copyWith(isWifiP2pEnabled: false));
+        _updateState(
+          _currentState.copyWith(
+            isWifiP2pEnabled: false,
+            isDiscovering: false,
+            isConnecting: false,
+            pendingPeerAddress: null,
+          ),
+        );
         _addLog(
           'Permission denied: $missingCapabilities. Grant permissions in Android Settings and retry.',
         );
@@ -1093,6 +1117,20 @@ class WiFiDirectController {
         ),
       );
     } else {
+      final isDuplicateCompletion =
+          filePath != null &&
+          _currentState.recentFileTransfers.any(
+            (transfer) =>
+                !transfer.isUploading &&
+                transfer.isCompleted &&
+                transfer.fileName == fileName &&
+                transfer.filePath == filePath,
+          );
+      if (isDuplicateCompletion) {
+        _addLog('Ignoring duplicate file completion event: $fileName');
+        return;
+      }
+
       // Handle case where we don't have a current transfer (shouldn't happen with new code)
       final fileTransfer = FileTransferInfo(
         fileName: fileName,
