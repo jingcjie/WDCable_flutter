@@ -1,0 +1,1 @@
+Offline file, chat, speed test, and audio transfer over Wi-Fi Direct.

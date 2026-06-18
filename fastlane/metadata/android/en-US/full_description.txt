@@ -1,0 +1,16 @@
+WD Cable creates a private local link between nearby devices using Wi-Fi Direct. Once connected, the devices share one app session for chat, file transfer, speed testing, and audio.
+
+No internet, router, hotspot, account, or cloud service is required. The connection stays local between the participating devices.
+
+Features:
+
+- Direct device-to-device connection over Wi-Fi Direct.
+- High-speed local file transfer.
+- Real-time chat between connected peers.
+- Audio Link for live microphone audio over the peer session.
+- Built-in upload and download speed tests.
+- Shared session protocol for chat, files, speed tests, and audio.
+
+The Android app can connect to another Android device running WD Cable. A separate Windows companion client is also available for Android-to-Windows workflows, including using an Android device as a local microphone sender.
+
+WD Cable is designed for offline peer-to-peer experiments, local transfer, quick device-to-device testing, and private nearby sharing.
