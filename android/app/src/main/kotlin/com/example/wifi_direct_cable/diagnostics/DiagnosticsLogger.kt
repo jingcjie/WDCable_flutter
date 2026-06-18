@@ -39,22 +39,61 @@ object DiagnosticsLogger {
 
     fun exportText(): String {
         val snapshot = synchronized(lock) { entries.toList() }
+        val requiredKeys = listOf(
+            "platform",
+            "opId",
+            "state",
+            "api",
+            "callback",
+            "broadcast",
+            "result",
+            "reasonCode",
+            "reasonName",
+            "peerAddress",
+            "peerName",
+            "discoveryState",
+            "listenState",
+            "groupFormed",
+            "isGroupOwner",
+            "groupOwnerAddress"
+        )
         return buildString {
             appendLine("WDCable Android Diagnostics")
             appendLine("entries=${snapshot.size}")
             for (entry in snapshot) {
+                val fieldsWithDefaults = linkedMapOf<String, Any?>(
+                    "platform" to "android",
+                    "opId" to "",
+                    "state" to "",
+                    "api" to "",
+                    "callback" to "",
+                    "broadcast" to "",
+                    "result" to "",
+                    "reasonCode" to "",
+                    "reasonName" to "",
+                    "peerAddress" to "",
+                    "peerName" to "",
+                    "discoveryState" to "",
+                    "listenState" to "",
+                    "groupFormed" to "",
+                    "isGroupOwner" to "",
+                    "groupOwnerAddress" to ""
+                )
+                fieldsWithDefaults.putAll(entry.fields)
                 append(timestampFormat.format(Date(entry.timestampMs)))
-                append(" [")
+                append(" | ")
+                append(requiredKeys.joinToString(" | ") { key -> "$key=${fieldsWithDefaults[key] ?: ""}" })
+                append(" | category=")
                 append(entry.category)
-                append("] ")
+                append(" | message=")
                 append(entry.message)
-                if (entry.fields.isNotEmpty()) {
-                    append(" ")
-                    append(
-                        entry.fields.entries.joinToString(" ") { (key, value) ->
-                            "$key=${value ?: ""}"
-                        }
-                    )
+                val extra = entry.fields
+                    .filterKeys { key -> key !in requiredKeys && key != "message" }
+                    .entries
+                    .joinToString(" | ") { (key, value) -> "$key=${value ?: ""}" }
+                if (extra.isNotEmpty()) {
+                    append(" | ")
+                    append(extra)
                 }
                 appendLine()
             }

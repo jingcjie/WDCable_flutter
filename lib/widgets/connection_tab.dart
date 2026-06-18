@@ -35,6 +35,14 @@ class ConnectionTab extends StatelessWidget {
   }
 
   Widget _buildWifiP2pStatus(BuildContext context) {
+    final statusText = !state.isWifiP2pEnabled
+        ? AppLocalizations.of(context)!.disabledEnableWifi
+        : state.isDiscovering
+        ? 'Scan running'
+        : state.isAvailableNearby
+        ? 'Available nearby'
+        : state.nativeWifiDirectState;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -68,15 +76,22 @@ class ConnectionTab extends StatelessWidget {
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  state.isWifiP2pEnabled
-                      ? AppLocalizations.of(context)!.readyForConnections
-                      : AppLocalizations.of(context)!.disabledEnableWifi,
+                  statusText,
                   style: TextStyle(
                     color: state.isWifiP2pEnabled ? Colors.green : Colors.red,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (state.lastNativeError != null)
+                  Text(
+                    state.lastNativeError!,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -90,7 +105,7 @@ class ConnectionTab extends StatelessWidget {
     final statusText = hasWifiDirectLink
         ? '${AppLocalizations.of(context)!.connected} / ${state.sessionState}'
         : state.isConnecting
-        ? 'Connecting...'
+        ? 'Connecting to ${_pendingPeerLabel()}'
         : AppLocalizations.of(context)!.disconnected;
 
     return Container(
@@ -304,6 +319,17 @@ class ConnectionTab extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (peer.isWdCablePeer)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Text(
+                            'WDCable peer',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   trailing: ElevatedButton(
@@ -358,6 +384,19 @@ class ConnectionTab extends StatelessWidget {
     }
 
     return _PeerAction(AppLocalizations.of(context)!.connect, true);
+  }
+
+  String _pendingPeerLabel() {
+    final pendingAddress = state.pendingPeerAddress;
+    if (pendingAddress == null || pendingAddress.isEmpty) {
+      return 'peer';
+    }
+    for (final peer in state.peers) {
+      if (peer.deviceAddress == pendingAddress && peer.deviceName.isNotEmpty) {
+        return peer.deviceName;
+      }
+    }
+    return pendingAddress;
   }
 
   Widget _buildLogsSection(BuildContext context) {

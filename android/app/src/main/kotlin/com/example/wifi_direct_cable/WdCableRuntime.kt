@@ -60,11 +60,8 @@ object WdCableRuntime {
             val manager = wifiDirectManager ?: return
             if (manager.channel == null) return
 
-            val activeReceiver = receiver ?: WiFiDirectBroadcastReceiver(
-                manager.wifiP2pManager,
-                manager.channel,
-                manager
-            ).also { receiver = it }
+            val activeReceiver = receiver ?: WiFiDirectBroadcastReceiver(manager)
+                .also { receiver = it }
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -99,6 +96,7 @@ object WdCableRuntime {
         val manager = synchronized(lock) { wifiDirectManager }
         val session = synchronized(lock) { sessionManager }
         manager?.replayLatestConnectionInfo()
+        manager?.replayLatestNativeState()
         session?.replayCurrentState()
     }
 
@@ -189,6 +187,11 @@ object WdCableRuntime {
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
+            addAction(WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION)
+            addAction(WifiP2pManager.ACTION_WIFI_P2P_REQUEST_RESPONSE_CHANGED)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                addAction(WifiP2pManager.ACTION_WIFI_P2P_LISTEN_STATE_CHANGED)
+            }
         }
     }
 }

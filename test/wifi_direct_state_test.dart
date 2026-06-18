@@ -210,54 +210,51 @@ void main() {
       expect(controller.currentState.currentFileTransfer, isNull);
     });
 
-    test(
-      'disconnect clears active transfer and audio state',
-      () async {
-        service.emit(
-          ConnectionChangedEvent(
-            WiFiDirectConnectionInfo(
-              isConnected: true,
-              isGroupOwner: false,
-              groupOwnerAddress: '192.168.49.1',
-            ),
+    test('disconnect clears active transfer and audio state', () async {
+      service.emit(
+        ConnectionChangedEvent(
+          WiFiDirectConnectionInfo(
+            isConnected: true,
+            isGroupOwner: false,
+            groupOwnerAddress: '192.168.49.1',
           ),
-        );
-        service.emit(FileReceiveStartedEvent('sample.txt', 128));
-        service.emit(
-          AudioStateChangedEvent(
-            mode: 'receive',
-            state: 'streaming',
-            streamId: 7,
-            source: 'microphone',
-            encoding: 'opus',
-            peerReady: true,
-            isStreaming: true,
-            message: 'Audio Link streaming',
+        ),
+      );
+      service.emit(FileReceiveStartedEvent('sample.txt', 128));
+      service.emit(
+        AudioStateChangedEvent(
+          mode: 'receive',
+          state: 'streaming',
+          streamId: 7,
+          source: 'microphone',
+          encoding: 'opus',
+          peerReady: true,
+          isStreaming: true,
+          message: 'Audio Link streaming',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.currentFileTransfer, isNotNull);
+      expect(controller.currentState.audioState, 'streaming');
+
+      service.emit(
+        ConnectionChangedEvent(
+          WiFiDirectConnectionInfo(
+            isConnected: false,
+            isGroupOwner: false,
+            groupOwnerAddress: null,
           ),
-        );
-        await pumpEventQueue();
+        ),
+      );
+      await pumpEventQueue();
 
-        expect(controller.currentState.currentFileTransfer, isNotNull);
-        expect(controller.currentState.audioState, 'streaming');
-
-        service.emit(
-          ConnectionChangedEvent(
-            WiFiDirectConnectionInfo(
-              isConnected: false,
-              isGroupOwner: false,
-              groupOwnerAddress: null,
-            ),
-          ),
-        );
-        await pumpEventQueue();
-
-        expect(controller.currentState.connectionInfo, isNull);
-        expect(controller.currentState.sessionState, 'Disconnected');
-        expect(controller.currentState.currentFileTransfer, isNull);
-        expect(controller.currentState.audioState, 'idle');
-        expect(controller.currentState.audioStreamId, isNull);
-      },
-    );
+      expect(controller.currentState.connectionInfo, isNull);
+      expect(controller.currentState.sessionState, 'Disconnected');
+      expect(controller.currentState.currentFileTransfer, isNull);
+      expect(controller.currentState.audioState, 'idle');
+      expect(controller.currentState.audioStreamId, isNull);
+    });
 
     test(
       'chat send waits for session ready after Wi-Fi Direct connects',
@@ -331,7 +328,11 @@ void main() {
             sessionId: 'session-failure',
             role: 'client',
             protocolVersion: 1,
-            capabilities: const ['control.chat', 'audio.link', 'audio.codec.opus'],
+            capabilities: const [
+              'control.chat',
+              'audio.link',
+              'audio.codec.opus',
+            ],
             peerCapabilities: const ['audio.link', 'audio.codec.opus'],
           ),
         );
@@ -393,6 +394,53 @@ void main() {
       expect(controller.currentState.isDiscovering, isFalse);
       expect(controller.currentState.isConnecting, isFalse);
       expect(controller.currentState.pendingPeerAddress, isNull);
+    });
+
+    test('discovery state follows native discovery events', () async {
+      await controller.discoverPeers();
+      await pumpEventQueue();
+
+      expect(service.discoverCalls, 1);
+      expect(controller.currentState.isDiscovering, isFalse);
+
+      service.emit(
+        DiscoveryStateChangedEvent({
+          'state': 'Discovering',
+          'opId': 1,
+          'p2pStateKnown': true,
+          'p2pEnabled': true,
+          'isDiscovering': true,
+          'discoveryState': 'started',
+          'isListening': false,
+          'listenState': 'unknown',
+          'serviceRegistered': false,
+          'callback': 'test',
+        }),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.isDiscovering, isTrue);
+      expect(controller.currentState.discoveryState, 'started');
+
+      service.emit(
+        DiscoveryStateChangedEvent({
+          'state': 'ServiceRegistered',
+          'opId': 1,
+          'p2pStateKnown': true,
+          'p2pEnabled': true,
+          'isDiscovering': false,
+          'discoveryState': 'stopped',
+          'isListening': true,
+          'listenState': 'started',
+          'serviceRegistered': true,
+          'callback': 'test',
+        }),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.isDiscovering, isFalse);
+      expect(controller.currentState.discoveryState, 'stopped');
+      expect(controller.currentState.isAvailableNearby, isTrue);
     });
 
     test(
@@ -613,14 +661,14 @@ void main() {
   });
 
   group('WiFiDirectService bridge parsing', () {
-    test('emits typed events from platform method calls with coercion', () async {
-      final service = WiFiDirectService();
-      final events = <WiFiDirectEvent>[];
-      final subscription = service.eventStream.listen(events.add);
+    test(
+      'emits typed events from platform method calls with coercion',
+      () async {
+        final service = WiFiDirectService();
+        final events = <WiFiDirectEvent>[];
+        final subscription = service.eventStream.listen(events.add);
 
-      await _invokePlatformEvent(
-        'onAudioStats',
-        <String, Object?>{
+        await _invokePlatformEvent('onAudioStats', <String, Object?>{
           'mode': 'receive',
           'state': 'streaming',
           'streamId': '42',
@@ -631,20 +679,20 @@ void main() {
           'droppedFrames': 0,
           'underflowCount': '3',
           'latencyMs': -1,
-        },
-      );
-      await pumpEventQueue();
+        });
+        await pumpEventQueue();
 
-      expect(events, hasLength(1));
-      final stats = events.single as AudioStatsEvent;
-      expect(stats.streamId, 42);
-      expect(stats.bufferLevelMs, 80);
-      expect(stats.framesReceived, 2);
-      expect(stats.underflowCount, 3);
+        expect(events, hasLength(1));
+        final stats = events.single as AudioStatsEvent;
+        expect(stats.streamId, 42);
+        expect(stats.bufferLevelMs, 80);
+        expect(stats.framesReceived, 2);
+        expect(stats.underflowCount, 3);
 
-      await subscription.cancel();
-      service.dispose();
-    });
+        await subscription.cancel();
+        service.dispose();
+      },
+    );
 
     test('malformed platform payload is surfaced as ErrorEvent', () async {
       final service = WiFiDirectService();
@@ -683,6 +731,8 @@ class _FakeWiFiDirectService extends WiFiDirectService {
       StreamController<WiFiDirectEvent>.broadcast();
 
   int connectCalls = 0;
+  int discoverCalls = 0;
+  int stopDiscoveryCalls = 0;
   int audioStartCalls = 0;
   String? lastAudioMode;
   final List<String> sentMessages = [];
@@ -696,6 +746,24 @@ class _FakeWiFiDirectService extends WiFiDirectService {
 
   @override
   Future<bool> isWifiP2pEnabled() async => true;
+
+  @override
+  Future<Map<String, dynamic>> getDiscoveryStatus() async {
+    return {
+      'state': 'Ready',
+      'opId': 0,
+      'p2pStateKnown': true,
+      'p2pEnabled': true,
+      'isDiscovering': false,
+      'discoveryState': 'stopped',
+      'isListening': false,
+      'listenState': 'unknown',
+      'serviceRegistered': false,
+      'reasonCode': -1,
+      'reasonName': '',
+      'peersCount': 0,
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> getDeviceSettings() async {
@@ -717,6 +785,17 @@ class _FakeWiFiDirectService extends WiFiDirectService {
   Future<String> connectToPeer(String deviceAddress) async {
     connectCalls++;
     return 'Connection initiated';
+  }
+
+  @override
+  Future<String> discoverPeers() async {
+    discoverCalls++;
+    return 'Discovery requested';
+  }
+
+  @override
+  Future<void> stopDiscovery() async {
+    stopDiscoveryCalls++;
   }
 
   @override

@@ -186,6 +186,7 @@ class FlutterMethodChannelHandler(
         val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val stats = sessionManager.getConnectionStats()
         val runtimeDiagnostics = WdCableRuntime.diagnostics()
+        val discoveryStatus = wifiDirectManager.getDiscoveryStatus()
         val isConnected = stats["isConnected"] as? Boolean ?: false
         val settings = mapOf(
             "wifiEnabled" to wifiManager.isWifiEnabled,
@@ -203,8 +204,15 @@ class FlutterMethodChannelHandler(
             "sessionReady" to (stats["isReady"] as? Boolean ?: false),
             "disconnectReason" to (stats["disconnectReason"] as? String ?: ""),
             "discoveredDevicesCount" to wifiDirectManager.discoveredDevicesCount,
+            "nativeWifiDirectState" to (discoveryStatus["state"] ?: "Unavailable"),
+            "isDiscovering" to (discoveryStatus["isDiscovering"] ?: false),
+            "discoveryState" to (discoveryStatus["discoveryState"] ?: "stopped"),
+            "isListening" to (discoveryStatus["isListening"] ?: false),
+            "listenState" to (discoveryStatus["listenState"] ?: "unknown"),
+            "serviceRegistered" to (discoveryStatus["serviceRegistered"] ?: false),
+            "operationId" to (discoveryStatus["opId"] ?: 0),
+            "lastNativeReason" to (discoveryStatus["reasonName"] ?: ""),
             "connectedClientsCount" to if (isConnected) 1 else 0,
-            "locationPermissionGranted" to permissionManager.hasLocationPermission(),
             "nearbyWifiDevicesPermissionGranted" to permissionManager.hasNearbyWifiDevicesPermission(),
             "recordAudioPermissionGranted" to permissionManager.hasRecordAudioPermission(),
             "storageAccessMode" to "system_picker",
@@ -227,17 +235,12 @@ class FlutterMethodChannelHandler(
         val wifiDirectSupported = context.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)
         return wifiManager.isWifiEnabled &&
             wifiDirectSupported &&
-            permissionManager.hasLocationPermission() &&
-            permissionManager.hasNearbyWifiDevicesPermission() &&
+            permissionManager.hasWifiDirectRuntimePermissions() &&
             wifiDirectManager.channel != null
     }
     
     private fun getDiscoveryStatus(result: MethodChannel.Result) {
-        val status = mapOf(
-            "isDiscovering" to true, // We don't have direct access to discovery state
-            "peersCount" to 0 // This would be updated via broadcast receiver
-        )
-        result.success(status)
+        result.success(wifiDirectManager.getDiscoveryStatus())
     }
     
     private fun openFile(filePath: String?, result: MethodChannel.Result) {

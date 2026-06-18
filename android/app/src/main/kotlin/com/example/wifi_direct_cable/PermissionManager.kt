@@ -20,11 +20,7 @@ class PermissionManager(
     
     fun checkPermissions() {
         val permissions = mutableListOf<String>()
-        
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(activity, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
                 permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
@@ -81,16 +77,16 @@ class PermissionManager(
         }
     }
     
-    fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
-    
     fun hasNearbyWifiDevicesPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(activity, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // Not required on older versions
+            true
         }
+    }
+
+    fun hasWifiDirectRuntimePermissions(): Boolean {
+        return hasNearbyWifiDevicesPermission()
     }
 
     fun hasRecordAudioPermission(): Boolean {
@@ -114,7 +110,6 @@ class PermissionManager(
 
     private fun permissionToCapability(permission: String): String {
         return when (permission) {
-            Manifest.permission.ACCESS_FINE_LOCATION -> "Location"
             Manifest.permission.NEARBY_WIFI_DEVICES -> "Nearby Wi-Fi devices"
             Manifest.permission.RECORD_AUDIO -> "Microphone"
             else -> permission

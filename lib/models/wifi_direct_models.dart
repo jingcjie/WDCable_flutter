@@ -11,11 +11,13 @@ class WiFiDirectDevice {
   final String deviceName;
   final String deviceAddress;
   final int status;
+  final bool isWdCablePeer;
 
   WiFiDirectDevice({
     required this.deviceName,
     required this.deviceAddress,
     required this.status,
+    this.isWdCablePeer = false,
   });
 
   factory WiFiDirectDevice.fromMap(Map<String, dynamic> map) {
@@ -23,6 +25,7 @@ class WiFiDirectDevice {
       deviceName: map['deviceName'] ?? 'Unknown Device',
       deviceAddress: map['deviceAddress'] ?? '',
       status: map['status'] ?? 0,
+      isWdCablePeer: map['isWdCablePeer'] == true,
     );
   }
 
@@ -31,6 +34,7 @@ class WiFiDirectDevice {
       'deviceName': deviceName,
       'deviceAddress': deviceAddress,
       'status': status,
+      'isWdCablePeer': isWdCablePeer,
     };
   }
 
@@ -350,7 +354,14 @@ int _intFromMap(Object? value, int fallback) {
 
 class WiFiDirectState {
   final bool isWifiP2pEnabled;
+  final String nativeWifiDirectState;
   final bool isDiscovering;
+  final String discoveryState;
+  final bool isListening;
+  final String listenState;
+  final bool isServiceRegistered;
+  final int operationId;
+  final String? lastNativeError;
   final bool isConnecting;
   final String? pendingPeerAddress;
   final bool isServerStarted;
@@ -381,7 +392,14 @@ class WiFiDirectState {
 
   WiFiDirectState({
     this.isWifiP2pEnabled = false,
+    this.nativeWifiDirectState = 'Unavailable',
     this.isDiscovering = false,
+    this.discoveryState = 'stopped',
+    this.isListening = false,
+    this.listenState = 'unknown',
+    this.isServiceRegistered = false,
+    this.operationId = 0,
+    this.lastNativeError,
     this.isConnecting = false,
     this.pendingPeerAddress,
     this.isServerStarted = false,
@@ -413,7 +431,14 @@ class WiFiDirectState {
 
   WiFiDirectState copyWith({
     bool? isWifiP2pEnabled,
+    String? nativeWifiDirectState,
     bool? isDiscovering,
+    String? discoveryState,
+    bool? isListening,
+    String? listenState,
+    bool? isServiceRegistered,
+    int? operationId,
+    Object? lastNativeError = _unset,
     bool? isConnecting,
     Object? pendingPeerAddress = _unset,
     bool? isServerStarted,
@@ -444,7 +469,17 @@ class WiFiDirectState {
   }) {
     return WiFiDirectState(
       isWifiP2pEnabled: isWifiP2pEnabled ?? this.isWifiP2pEnabled,
+      nativeWifiDirectState:
+          nativeWifiDirectState ?? this.nativeWifiDirectState,
       isDiscovering: isDiscovering ?? this.isDiscovering,
+      discoveryState: discoveryState ?? this.discoveryState,
+      isListening: isListening ?? this.isListening,
+      listenState: listenState ?? this.listenState,
+      isServiceRegistered: isServiceRegistered ?? this.isServiceRegistered,
+      operationId: operationId ?? this.operationId,
+      lastNativeError: identical(lastNativeError, _unset)
+          ? this.lastNativeError
+          : lastNativeError as String?,
       isConnecting: isConnecting ?? this.isConnecting,
       pendingPeerAddress: identical(pendingPeerAddress, _unset)
           ? this.pendingPeerAddress
@@ -494,6 +529,8 @@ class WiFiDirectState {
   }
 
   bool get hasWifiDirectLink => connectionInfo?.isConnected == true;
+
+  bool get isAvailableNearby => isListening || isServiceRegistered;
 
   bool get isSessionReady => sessionState == 'Ready';
 

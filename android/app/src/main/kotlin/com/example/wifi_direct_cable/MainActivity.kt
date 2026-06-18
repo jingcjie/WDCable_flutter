@@ -66,10 +66,18 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     override fun onResume() {
         super.onResume()
         WdCableRuntime.registerReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
+        if (::wifiDirectManager.isInitialized) {
+            wifiDirectManager.setForeground(true, "activity_resume")
+            wifiDirectManager.hydrateState("activity_resume")
+            wifiDirectManager.ensureAvailable("activity_resume")
+        }
         WdCableRuntime.replayCurrentStateToFlutter()
     }
 
     override fun onPause() {
+        if (::wifiDirectManager.isInitialized) {
+            wifiDirectManager.setForeground(false, "activity_pause")
+        }
         WdCableRuntime.unregisterReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
         super.onPause()
     }
@@ -83,7 +91,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
             audioService.cleanup()
         }
         if (::wifiDirectManager.isInitialized) {
-            wifiDirectManager.channel?.close()
+            wifiDirectManager.close()
         }
         WdCableRuntime.clear()
         super.onDestroy()
@@ -99,6 +107,10 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         permissionManager.handlePermissionResult(requestCode, permissions, grantResults)
+        if (::wifiDirectManager.isInitialized) {
+            wifiDirectManager.hydrateState("permission_result")
+            wifiDirectManager.ensureAvailable("permission_result")
+        }
     }
     
     // WiFiDirectManager.ConnectionListener implementation
@@ -118,7 +130,8 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
             mapOf(
                 "deviceName" to device.deviceName,
                 "deviceAddress" to device.deviceAddress,
-                "status" to device.status
+                "status" to device.status,
+                "isWdCablePeer" to wifiDirectManager.isWdCablePeer(device.deviceAddress)
             )
         }
         methodChannel.invokeMethod("onPeersChanged", peerList)

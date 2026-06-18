@@ -119,7 +119,6 @@ class WiFiDirectController {
               'Wi-Fi Direct connected as ${connectionEvent.connectionInfo.isGroupOwner ? "Group Owner" : "Client"}';
           _addLog(connectionStatus);
           AppLogger.info('[ANDROID CONNECTION] $connectionStatus');
-          stopDiscovery();
           _addLog('Waiting for WDCable session handshake');
         } else {
           if (_currentState.isConnecting) {
@@ -130,6 +129,42 @@ class WiFiDirectController {
           AppLogger.info('[ANDROID CONNECTION] Disconnected');
           _clearSessionState();
         }
+        break;
+
+      case DiscoveryStateChangedEvent nativeEvent:
+        final wasDiscovering = _currentState.isDiscovering;
+        _handleNativeStateChanged(nativeEvent, logStateChange: false);
+        if (nativeEvent.callback != 'replay' &&
+            wasDiscovering != nativeEvent.isDiscovering) {
+          _addLog(nativeEvent.isDiscovering ? 'Scan running' : 'Scan stopped');
+        }
+        break;
+
+      case ListenStateChangedEvent nativeEvent:
+        final wasAvailable = _currentState.isAvailableNearby;
+        _handleNativeStateChanged(nativeEvent, logStateChange: false);
+        if (nativeEvent.callback != 'replay' &&
+            !wasAvailable &&
+            _currentState.isAvailableNearby) {
+          _addLog('Available nearby');
+        }
+        break;
+
+      case ServiceStateChangedEvent nativeEvent:
+        final wasRegistered = _currentState.isServiceRegistered;
+        _handleNativeStateChanged(nativeEvent, logStateChange: false);
+        if (nativeEvent.callback != 'replay' &&
+            wasRegistered != nativeEvent.serviceRegistered) {
+          _addLog(
+            nativeEvent.serviceRegistered
+                ? 'WDCable service registered'
+                : 'WDCable service not registered',
+          );
+        }
+        break;
+
+      case NativeStateChangedEvent nativeEvent:
+        _handleNativeStateChanged(nativeEvent);
         break;
 
       case SessionStateChangedEvent sessionEvent:
@@ -257,6 +292,7 @@ class WiFiDirectController {
         final errorMessage = 'Error: ${errorEvent.error}';
         _addLog(errorMessage);
         AppLogger.error('[ANDROID ERROR] ${errorEvent.error}');
+        _updateState(_currentState.copyWith(lastNativeError: errorEvent.error));
         if (errorEvent.error.contains('Connection failed')) {
           _updateState(
             _currentState.copyWith(
@@ -284,10 +320,12 @@ class WiFiDirectController {
             : permissionEvent.missingCapabilities.join(', ');
         _updateState(
           _currentState.copyWith(
+            nativeWifiDirectState: 'BlockedByPermission',
             isWifiP2pEnabled: false,
             isDiscovering: false,
             isConnecting: false,
             pendingPeerAddress: null,
+            lastNativeError: 'Permission denied: $missingCapabilities',
           ),
         );
         _addLog(
@@ -339,6 +377,92 @@ class WiFiDirectController {
         _handleAudioError(audioError);
         break;
     }
+  }
+
+  void _handleNativeStateChanged(
+    NativeStateChangedEvent event, {
+    bool logStateChange = true,
+  }) {
+    final previousState = _currentState.nativeWifiDirectState;
+    final nextState = _stateFromNativeEvent(event);
+    _updateState(nextState);
+
+    if (event.callback != 'replay' &&
+        logStateChange &&
+        previousState != event.state) {
+      _addLog('Android Wi-Fi Direct: ${event.state}');
+    }
+
+    if (event.state == 'Error' && event.decodedError.isNotEmpty) {
+      _addLog('Native Wi-Fi Direct error: ${event.decodedError}');
+    }
+  }
+
+  WiFiDirectState _stateFromNativeEvent(NativeStateChangedEvent event) {
+    var nextState = _currentState.copyWith(
+      nativeWifiDirectState: event.state,
+      operationId: event.operationId,
+      isDiscovering: event.isDiscovering,
+      discoveryState: event.discoveryState,
+      isListening: event.isListening,
+      listenState: event.listenState,
+      isServiceRegistered: event.serviceRegistered,
+      isWifiP2pEnabled: event.p2pStateKnown
+          ? event.p2pEnabled
+          : _currentState.isWifiP2pEnabled,
+    );
+
+    if (event.peerAddress.isNotEmpty) {
+      nextState = nextState.copyWith(pendingPeerAddress: event.peerAddress);
+    }
+
+    switch (event.state) {
+      case 'Connecting':
+        nextState = nextState.copyWith(isConnecting: true);
+        break;
+      case 'Connected':
+        nextState = nextState.copyWith(
+          isConnecting: false,
+          pendingPeerAddress: null,
+          lastNativeError: null,
+        );
+        break;
+      case 'Error':
+        nextState = nextState.copyWith(
+          isConnecting: false,
+          pendingPeerAddress: null,
+          lastNativeError: event.decodedError.isEmpty
+              ? 'Native Wi-Fi Direct error'
+              : event.decodedError,
+        );
+        break;
+      case 'BlockedByPermission':
+        nextState = nextState.copyWith(
+          isConnecting: false,
+          pendingPeerAddress: null,
+          lastNativeError: 'Permission denied',
+        );
+        break;
+      case 'Disconnecting':
+      case 'Unavailable':
+      case 'Ready':
+      case 'Listening':
+      case 'ServiceRegistered':
+      case 'Discovering':
+      case 'UserStoppedScan':
+      case 'Background':
+        nextState = nextState.copyWith(
+          isConnecting: false,
+          pendingPeerAddress: null,
+        );
+        break;
+    }
+
+    if (event.state == 'Connected') {
+      nextState = nextState.copyWith(lastNativeError: null);
+    }
+
+    return nextState;
   }
 
   void _handleDataReceived(String data, int? timestamp) {
@@ -524,6 +648,10 @@ class WiFiDirectController {
     try {
       final isEnabled = await _service.isWifiP2pEnabled();
       _updateState(_currentState.copyWith(isWifiP2pEnabled: isEnabled));
+      final discoveryStatus = await _service.getDiscoveryStatus();
+      _updateState(
+        _stateFromNativeEvent(NativeStateChangedEvent(discoveryStatus)),
+      );
       await logDeviceSettings();
     } catch (e) {
       _addLog('Failed to initialize state: $e');
@@ -533,15 +661,13 @@ class WiFiDirectController {
   // Public methods for UI to call
 
   Future<void> discoverPeers() async {
-    _updateState(_currentState.copyWith(isDiscovering: true));
-
     try {
+      _updateState(_currentState.copyWith(lastNativeError: null));
       final result = await _service.discoverPeers();
       _addLog(result);
     } catch (e) {
+      _updateState(_currentState.copyWith(lastNativeError: e.toString()));
       _addLog('Discovery failed: $e');
-    } finally {
-      _updateState(_currentState.copyWith(isDiscovering: false));
     }
   }
 
@@ -569,6 +695,7 @@ class WiFiDirectController {
       _currentState.copyWith(
         isConnecting: true,
         pendingPeerAddress: device.deviceAddress,
+        lastNativeError: null,
       ),
     );
 
@@ -577,7 +704,11 @@ class WiFiDirectController {
       _addLog('Connecting to ${device.deviceName}: $result');
     } catch (e) {
       _updateState(
-        _currentState.copyWith(isConnecting: false, pendingPeerAddress: null),
+        _currentState.copyWith(
+          isConnecting: false,
+          pendingPeerAddress: null,
+          lastNativeError: e.toString(),
+        ),
       );
       _addLog('Connection failed: $e');
     }
@@ -585,6 +716,7 @@ class WiFiDirectController {
 
   Future<void> disconnect() async {
     try {
+      _updateState(_currentState.copyWith(lastNativeError: null));
       final result = await _service.disconnect();
       _addLog('Disconnected: $result');
       _clearSessionState();
@@ -623,6 +755,13 @@ class WiFiDirectController {
         'WiFi Direct Supported: ${settings['wifiDirectSupported'] ?? false}',
       );
       _addLog('WiFi P2P Enabled: ${settings['wifiP2pEnabled'] ?? false}');
+      _addLog(
+        'Native State: ${settings['nativeWifiDirectState'] ?? 'Unknown'}',
+      );
+      _addLog('Discovery State: ${settings['discoveryState'] ?? 'unknown'}');
+      _addLog('Listen State: ${settings['listenState'] ?? 'unknown'}');
+      _addLog('Service Registered: ${settings['serviceRegistered'] ?? false}');
+      _addLog('Operation ID: ${settings['operationId'] ?? 0}');
       _addLog('Is Group Owner: ${settings['isGroupOwner'] ?? false}');
       _addLog('Chat Server Running: ${settings['chatServerRunning'] ?? false}');
       _addLog(
@@ -645,8 +784,27 @@ class WiFiDirectController {
   Future<String> getDiagnosticLogs() async {
     try {
       final logs = await _service.getDiagnosticLogs();
+      final dartState = const JsonEncoder.withIndent('  ').convert({
+        'nativeWifiDirectState': _currentState.nativeWifiDirectState,
+        'isWifiP2pEnabled': _currentState.isWifiP2pEnabled,
+        'isDiscovering': _currentState.isDiscovering,
+        'discoveryState': _currentState.discoveryState,
+        'isListening': _currentState.isListening,
+        'listenState': _currentState.listenState,
+        'isServiceRegistered': _currentState.isServiceRegistered,
+        'operationId': _currentState.operationId,
+        'isConnecting': _currentState.isConnecting,
+        'pendingPeerAddress': _currentState.pendingPeerAddress,
+        'hasWifiDirectLink': _currentState.hasWifiDirectLink,
+        'sessionState': _currentState.sessionState,
+        'sessionId': _currentState.sessionId,
+        'sessionRole': _currentState.sessionRole,
+        'disconnectReason': _currentState.disconnectReason,
+        'lastNativeError': _currentState.lastNativeError,
+        'peersCount': _currentState.peers.length,
+      });
       _addLog('Diagnostic logs exported');
-      return logs;
+      return '$logs\nDart Wi-Fi Direct State\n$dartState\n';
     } catch (e) {
       _addLog('Failed to export diagnostic logs: $e');
       rethrow;
@@ -666,16 +824,16 @@ class WiFiDirectController {
     try {
       _addLog('Stopping current discovery...');
       await _service.stopDiscovery();
-      _addLog(
-        'Discovery stopped. Click Discover button to start new discovery.',
-      );
+      _addLog('Discovery stop requested');
     } catch (e) {
+      _updateState(_currentState.copyWith(lastNativeError: e.toString()));
       _addLog('Failed to stop discovery: $e');
     }
   }
 
   Future<void> resetWifiDirectSettings() async {
     try {
+      _updateState(_currentState.copyWith(lastNativeError: null));
       final result = await _service.resetWifiDirectSettings();
       _addLog(result);
       _clearSessionState();

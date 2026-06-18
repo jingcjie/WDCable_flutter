@@ -20,6 +20,43 @@ class ConnectionChangedEvent extends WiFiDirectEvent {
   ConnectionChangedEvent(this.connectionInfo);
 }
 
+class NativeStateChangedEvent extends WiFiDirectEvent {
+  final Map<String, dynamic> data;
+  NativeStateChangedEvent(this.data);
+
+  String get state => data['state']?.toString() ?? 'Unavailable';
+  int get operationId => _readEventInt(data['opId']);
+  bool get p2pStateKnown => data['p2pStateKnown'] == true;
+  bool get p2pEnabled => data['p2pEnabled'] == true;
+  bool get isDiscovering => data['isDiscovering'] == true;
+  String get discoveryState => data['discoveryState']?.toString() ?? 'stopped';
+  bool get isListening => data['isListening'] == true;
+  String get listenState => data['listenState']?.toString() ?? 'unknown';
+  bool get serviceRegistered => data['serviceRegistered'] == true;
+  String get peerAddress => data['peerAddress']?.toString() ?? '';
+  String get peerName => data['peerName']?.toString() ?? '';
+  int get reasonCode => _readEventInt(data['reasonCode'], fallback: -1);
+  String get reasonName => data['reasonName']?.toString() ?? '';
+  String get callback => data['callback']?.toString() ?? '';
+
+  String get decodedError {
+    if (reasonCode < 0 || reasonName.isEmpty) return '';
+    return '$reasonName ($reasonCode)';
+  }
+}
+
+class DiscoveryStateChangedEvent extends NativeStateChangedEvent {
+  DiscoveryStateChangedEvent(super.data);
+}
+
+class ListenStateChangedEvent extends NativeStateChangedEvent {
+  ListenStateChangedEvent(super.data);
+}
+
+class ServiceStateChangedEvent extends NativeStateChangedEvent {
+  ServiceStateChangedEvent(super.data);
+}
+
 class SessionStateChangedEvent extends WiFiDirectEvent {
   final String state;
   final String sessionId;
@@ -285,6 +322,38 @@ class WiFiDirectService {
             connectionData,
           );
           _eventController.add(ConnectionChangedEvent(connectionInfo));
+          break;
+
+        case 'onNativeStateChanged':
+          _eventController.add(
+            NativeStateChangedEvent(
+              Map<String, dynamic>.from(call.arguments as Map),
+            ),
+          );
+          break;
+
+        case 'onDiscoveryStateChanged':
+          _eventController.add(
+            DiscoveryStateChangedEvent(
+              Map<String, dynamic>.from(call.arguments as Map),
+            ),
+          );
+          break;
+
+        case 'onListenStateChanged':
+          _eventController.add(
+            ListenStateChangedEvent(
+              Map<String, dynamic>.from(call.arguments as Map),
+            ),
+          );
+          break;
+
+        case 'onServiceStateChanged':
+          _eventController.add(
+            ServiceStateChangedEvent(
+              Map<String, dynamic>.from(call.arguments as Map),
+            ),
+          );
           break;
 
         case 'onSessionStateChanged':
@@ -798,4 +867,10 @@ class WiFiDirectService {
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
+}
+
+int _readEventInt(Object? value, {int fallback = 0}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
 }
