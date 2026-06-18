@@ -49,6 +49,7 @@ class WiFiDirectManager(
         private set
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainThreadDispatcher = MainThreadDispatcher()
 
     private var latestPeersCount = 0
     private var latestConnectionInfo: Map<String, Any> = connectionInfoMap(false, false, "")
@@ -256,7 +257,7 @@ class WiFiDirectManager(
     }
 
     fun notifyPermissionDenied(capabilities: List<String>) {
-        methodChannel.invokeMethod(
+        invokeFlutter(
             "onPermissionDenied",
             mapOf(
                 "permissions" to wifiDirectRuntimePermissions(),
@@ -326,7 +327,7 @@ class WiFiDirectManager(
                 setNativeState(STATE_ERROR, "discoverPeers.onFailure")
                 val error = "Discovery failed: ${reasonName(reasonCode)} ($reasonCode)"
                 result.error("DISCOVERY_FAILED", error, nativeSnapshot())
-                methodChannel.invokeMethod("onError", error)
+                invokeFlutter("onError", error)
             }
         })
     }
@@ -415,7 +416,7 @@ class WiFiDirectManager(
                 )
                 val error = "Connection failed: $reasonName ($reasonCode)"
                 result.error("CONNECTION_FAILED", error, nativeSnapshot())
-                methodChannel.invokeMethod("onError", error)
+                invokeFlutter("onError", error)
                 cancelPendingConnect("connect.onFailure", opId) {
                     pendingPeerAddress = null
                     pendingPeerName = null
@@ -497,6 +498,28 @@ class WiFiDirectManager(
         dispatchToListener: Boolean,
         callback: ((WifiP2pInfo?) -> Unit)? = null
     ) {
+        mainThreadDispatcher.dispatch {
+            requestConnectionInfoOnceOnMain(reason, dispatchToListener, callback)
+        }
+    }
+
+    private fun requestConnectionInfoOnceOnMain(
+        reason: String,
+        dispatchToListener: Boolean,
+        callback: ((WifiP2pInfo?) -> Unit)?
+    ) {
+        var callbackDelivered = false
+        fun complete(info: WifiP2pInfo?) {
+            if (callbackDelivered) return
+            callbackDelivered = true
+            callback?.invoke(info)
+        }
+
+        if (shuttingDown) {
+            complete(null)
+            return
+        }
+
         val missingCapabilities = missingWifiDirectCapabilities()
         if (missingCapabilities.isNotEmpty()) {
             notifyPermissionDenied(missingCapabilities)
@@ -504,49 +527,58 @@ class WiFiDirectManager(
                 "One-shot connection info skipped because permissions are missing",
                 mapOf("api" to "requestConnectionInfo", "result" to "skipped", "reason" to reason, "capabilities" to missingCapabilities.joinToString(","))
             )
-            callback?.invoke(null)
+            complete(null)
             return
         }
 
         val activeChannel = channel
         if (activeChannel == null) {
-            callback?.invoke(null)
+            complete(null)
             return
         }
 
         try {
             wifiP2pManager.requestConnectionInfo(activeChannel) { info ->
-                logWifi(
-                    "requestConnectionInfo result",
-                    mapOf(
-                        "api" to "requestConnectionInfo",
-                        "callback" to "onConnectionInfoAvailable",
-                        "result" to "succeeded",
-                        "reason" to reason,
-                        "groupFormed" to info.groupFormed,
-                        "isGroupOwner" to info.isGroupOwner,
-                        "groupOwnerAddress" to (info.groupOwnerAddress?.hostAddress ?: "")
+                mainThreadDispatcher.dispatch {
+                    if (callbackDelivered) return@dispatch
+                    if (shuttingDown) {
+                        complete(null)
+                        return@dispatch
+                    }
+                    logWifi(
+                        "requestConnectionInfo result",
+                        mapOf(
+                            "api" to "requestConnectionInfo",
+                            "callback" to "onConnectionInfoAvailable",
+                            "result" to "succeeded",
+                            "reason" to reason,
+                            "groupFormed" to info.groupFormed,
+                            "isGroupOwner" to info.isGroupOwner,
+                            "groupOwnerAddress" to (info.groupOwnerAddress?.hostAddress ?: "")
+                        )
                     )
-                )
-                if (dispatchToListener) {
-                    handleConnectionInfoAvailable(info)
-                } else {
-                    latestConnectionInfo = connectionInfoMap(info)
+                    if (dispatchToListener) {
+                        handleConnectionInfoAvailable(info)
+                    } else {
+                        latestConnectionInfo = connectionInfoMap(info)
+                    }
+                    complete(info)
                 }
-                callback?.invoke(info)
             }
-            logWifi("requestConnectionInfo requested", mapOf("api" to "requestConnectionInfo", "result" to "requested", "reason" to reason))
         } catch (exception: Exception) {
             logWifi(
                 "requestConnectionInfo failed",
                 mapOf("api" to "requestConnectionInfo", "result" to "failed", "reason" to reason, "error" to exception.message)
             )
-            callback?.invoke(null)
+            complete(null)
+            return
         }
+
+        logWifi("requestConnectionInfo requested", mapOf("api" to "requestConnectionInfo", "result" to "requested", "reason" to reason))
     }
 
     fun replayLatestConnectionInfo() {
-        methodChannel.invokeMethod("onConnectionChanged", latestConnectionInfo)
+        invokeFlutter("onConnectionChanged", latestConnectionInfo)
     }
 
     fun replayLatestNativeState() {
@@ -680,7 +712,7 @@ class WiFiDirectManager(
             responsePeer == pendingPeerAddress
 
         if (nativeState == STATE_CONNECTING && matchesCurrentRequest && response == WifiP2pManager.CONNECTION_REQUEST_REJECT) {
-            methodChannel.invokeMethod("onError", "Connection request rejected by peer")
+            invokeFlutter("onError", "Connection request rejected by peer")
             cancelPendingConnect("request_response_rejected", activeConnectOpId) {
                 pendingPeerAddress = null
                 pendingPeerName = null
@@ -1019,7 +1051,7 @@ class WiFiDirectManager(
             logWifi("Disconnect cleanup complete", mapOf("api" to "cleanup", "opId" to opId, "result" to "complete", "reason" to reason))
             result.success(successMessage)
             if (emitReset) {
-                methodChannel.invokeMethod("onWifiDirectReset", null)
+                invokeFlutter("onWifiDirectReset", null)
             }
             ensureAvailable("$reason.complete")
         }
@@ -1157,7 +1189,7 @@ class WiFiDirectManager(
                     "connect timed out",
                     mapOf("api" to "connect", "callback" to "timeout", "opId" to opId, "result" to "timeout", "peerAddress" to deviceAddress)
                 )
-                methodChannel.invokeMethod("onError", "Connection timed out")
+                invokeFlutter("onError", "Connection timed out")
                 cancelPendingConnect("connect.timeout", opId) {
                     pendingPeerAddress = null
                     pendingPeerName = null
@@ -1200,11 +1232,11 @@ class WiFiDirectManager(
     }
 
     private fun emitNativeState(extra: Map<String, Any?> = emptyMap()) {
-        methodChannel.invokeMethod("onNativeStateChanged", nativeSnapshot(extra))
+        invokeFlutter("onNativeStateChanged", nativeSnapshot(extra))
     }
 
     private fun emitDiscoveryState(source: String) {
-        methodChannel.invokeMethod(
+        invokeFlutter(
             "onDiscoveryStateChanged",
             nativeSnapshot(
                 mapOf(
@@ -1218,7 +1250,7 @@ class WiFiDirectManager(
     }
 
     private fun emitListenState(source: String) {
-        methodChannel.invokeMethod(
+        invokeFlutter(
             "onListenStateChanged",
             nativeSnapshot(
                 mapOf(
@@ -1232,7 +1264,7 @@ class WiFiDirectManager(
     }
 
     private fun emitServiceState(source: String) {
-        methodChannel.invokeMethod(
+        invokeFlutter(
             "onServiceStateChanged",
             nativeSnapshot(
                 mapOf(
@@ -1283,7 +1315,15 @@ class WiFiDirectManager(
         val merged = nativeSnapshot(fields).toMutableMap()
         merged["message"] = message
         DiagnosticsLogger.log("wifi", message, merged)
-        methodChannel.invokeMethod("onDebug", diagnosticLine(message, merged))
+        invokeFlutter("onDebug", diagnosticLine(message, merged))
+    }
+
+    private fun invokeFlutter(method: String, arguments: Any?) {
+        mainThreadDispatcher.dispatch {
+            if (!shuttingDown) {
+                methodChannel.invokeMethod(method, arguments)
+            }
+        }
     }
 
     private fun diagnosticLine(message: String, fields: Map<String, Any?>): String {

@@ -17,6 +17,7 @@ object WdCableRuntime {
 
     private val lock = Any()
     private val receiverOwners = linkedSetOf<ReceiverOwner>()
+    private val mainThreadDispatcher = MainThreadDispatcher()
 
     private var appContext: Context? = null
     private var methodChannel: MethodChannel? = null
@@ -71,7 +72,7 @@ object WdCableRuntime {
                 }
                 receiverRegistered = true
                 DiagnosticsLogger.log("runtime", "Wi-Fi Direct receiver registered", mapOf("owner" to receiverOwnerLabelLocked()))
-                methodChannel?.invokeMethod("onDebug", "Wi-Fi Direct receiver registered by ${owner.label}")
+                emitDebug("Wi-Fi Direct receiver registered by ${owner.label}")
             } catch (exception: Exception) {
                 receiverOwners.remove(owner)
                 DiagnosticsLogger.log(
@@ -79,7 +80,7 @@ object WdCableRuntime {
                     "Wi-Fi Direct receiver registration failed",
                     mapOf("owner" to owner.label, "error" to exception.message)
                 )
-                methodChannel?.invokeMethod("onDebug", "Wi-Fi Direct receiver registration failed: ${exception.message}")
+                emitDebug("Wi-Fi Direct receiver registration failed: ${exception.message}")
             }
         }
     }
@@ -124,7 +125,7 @@ object WdCableRuntime {
                 "Foreground service start failed",
                 mapOf("error" to exception.message)
             )
-            methodChannel?.invokeMethod("onDebug", "Foreground service start failed: ${exception.message}")
+            emitDebug("Foreground service start failed: ${exception.message}")
         }
     }
 
@@ -165,11 +166,18 @@ object WdCableRuntime {
         try {
             receiver?.let { context.unregisterReceiver(it) }
             DiagnosticsLogger.log("runtime", "Wi-Fi Direct receiver unregistered")
-            methodChannel?.invokeMethod("onDebug", "Wi-Fi Direct receiver unregistered")
+            emitDebug("Wi-Fi Direct receiver unregistered")
         } catch (exception: IllegalArgumentException) {
-            methodChannel?.invokeMethod("onDebug", "Wi-Fi Direct receiver was already unregistered")
+            emitDebug("Wi-Fi Direct receiver was already unregistered")
         } finally {
             receiverRegistered = false
+        }
+    }
+
+    private fun emitDebug(message: String) {
+        mainThreadDispatcher.dispatch {
+            val activeChannel = synchronized(lock) { methodChannel }
+            activeChannel?.invokeMethod("onDebug", message)
         }
     }
 
