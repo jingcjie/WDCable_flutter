@@ -1,4 +1,0 @@
-New in 1.4.2:
-- Improved Wi-Fi Direct connection/session flow.
-- Fixed background connection behavior.
-- Updated release documentation and readiness metadata.
