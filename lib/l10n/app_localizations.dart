@@ -848,11 +848,47 @@ abstract class AppLocalizations {
   /// **'Stable'**
   String get audioStable;
 
+  /// No description provided for @audioQualityMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality'**
+  String get audioQualityMode;
+
+  /// No description provided for @audioQualityStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get audioQualityStandard;
+
+  /// No description provided for @audioQualityBalanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced'**
+  String get audioQualityBalanced;
+
+  /// No description provided for @audioQualityHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get audioQualityHigh;
+
+  /// No description provided for @audioQualityNearLossless.
+  ///
+  /// In en, this message translates to:
+  /// **'Near lossless'**
+  String get audioQualityNearLossless;
+
   /// No description provided for @audioEncoding.
   ///
   /// In en, this message translates to:
   /// **'Encoding'**
   String get audioEncoding;
+
+  /// No description provided for @audioOpus.
+  ///
+  /// In en, this message translates to:
+  /// **'Opus'**
+  String get audioOpus;
 
   /// No description provided for @audioOpus32Kbps.
   ///
@@ -895,6 +931,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bitrate'**
   String get audioBitrate;
+
+  /// No description provided for @audioConfiguredBitrate.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get audioConfiguredBitrate;
+
+  /// No description provided for @audioQuality.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality'**
+  String get audioQuality;
 
   /// No description provided for @audioBuffer.
   ///

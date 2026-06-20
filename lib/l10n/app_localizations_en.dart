@@ -426,7 +426,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioStable => 'Stable';
 
   @override
+  String get audioQualityMode => 'Quality';
+
+  @override
+  String get audioQualityStandard => 'Standard';
+
+  @override
+  String get audioQualityBalanced => 'Balanced';
+
+  @override
+  String get audioQualityHigh => 'High';
+
+  @override
+  String get audioQualityNearLossless => 'Near lossless';
+
+  @override
   String get audioEncoding => 'Encoding';
+
+  @override
+  String get audioOpus => 'Opus';
 
   @override
   String get audioOpus32Kbps => 'Opus 32 kbps';
@@ -448,6 +466,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioBitrate => 'Bitrate';
+
+  @override
+  String get audioConfiguredBitrate => 'Configured';
+
+  @override
+  String get audioQuality => 'Quality';
 
   @override
   String get audioBuffer => 'Buffer';

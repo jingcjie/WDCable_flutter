@@ -295,9 +295,32 @@ class FileTransferInfo {
   }
 }
 
+class AudioQualityInfo {
+  final String qualityMode;
+  final int bitrateBps;
+
+  const AudioQualityInfo({required this.qualityMode, required this.bitrateBps});
+
+  factory AudioQualityInfo.fromMap(Map<String, dynamic> map) {
+    return AudioQualityInfo(
+      qualityMode: map['qualityMode']?.toString() ?? 'standard',
+      bitrateBps: _intFromMap(map['bitrateBps'], 32000),
+    );
+  }
+}
+
+const List<AudioQualityInfo> defaultAudioQualityModes = [
+  AudioQualityInfo(qualityMode: 'standard', bitrateBps: 32000),
+  AudioQualityInfo(qualityMode: 'balanced', bitrateBps: 64000),
+  AudioQualityInfo(qualityMode: 'high', bitrateBps: 128000),
+  AudioQualityInfo(qualityMode: 'nearLossless', bitrateBps: 256000),
+];
+
 class AudioLinkStats {
   final String latencyMode;
+  final String qualityMode;
   final int bitrateBps;
+  final int configuredBitrateBps;
   final int bufferLevelMs;
   final int framesSent;
   final int framesReceived;
@@ -328,7 +351,9 @@ class AudioLinkStats {
 
   const AudioLinkStats({
     this.latencyMode = 'lowLatency',
+    this.qualityMode = 'standard',
     this.bitrateBps = 0,
+    this.configuredBitrateBps = 32000,
     this.bufferLevelMs = 0,
     this.framesSent = 0,
     this.framesReceived = 0,
@@ -361,7 +386,9 @@ class AudioLinkStats {
   factory AudioLinkStats.fromMap(Map<String, dynamic> map) {
     return AudioLinkStats(
       latencyMode: map['latencyMode']?.toString() ?? 'lowLatency',
+      qualityMode: map['qualityMode']?.toString() ?? 'standard',
       bitrateBps: _intFromMap(map['bitrateBps'], 0),
+      configuredBitrateBps: _intFromMap(map['configuredBitrateBps'], 32000),
       bufferLevelMs: _intFromMap(map['bufferLevelMs'], 0),
       framesSent: _intFromMap(map['framesSent'], 0),
       framesReceived: _intFromMap(map['framesReceived'], 0),
@@ -394,7 +421,9 @@ class AudioLinkStats {
 
   AudioLinkStats copyWith({
     String? latencyMode,
+    String? qualityMode,
     int? bitrateBps,
+    int? configuredBitrateBps,
     int? bufferLevelMs,
     int? framesSent,
     int? framesReceived,
@@ -425,7 +454,9 @@ class AudioLinkStats {
   }) {
     return AudioLinkStats(
       latencyMode: latencyMode ?? this.latencyMode,
+      qualityMode: qualityMode ?? this.qualityMode,
       bitrateBps: bitrateBps ?? this.bitrateBps,
+      configuredBitrateBps: configuredBitrateBps ?? this.configuredBitrateBps,
       bufferLevelMs: bufferLevelMs ?? this.bufferLevelMs,
       framesSent: framesSent ?? this.framesSent,
       framesReceived: framesReceived ?? this.framesReceived,
@@ -469,10 +500,13 @@ class AudioSupportInfo {
   final int channels;
   final int frameDurationMs;
   final int bitrateBps;
+  final int defaultBitrateBps;
   final int rtpPort;
   final int rtcpPort;
   final int rtpPayloadType;
   final List<String> latencyModes;
+  final List<AudioQualityInfo> qualityModes;
+  final String defaultQualityMode;
   final int requiresApiForSend;
   final int androidApi;
   final String libopusVersion;
@@ -490,10 +524,13 @@ class AudioSupportInfo {
     this.channels = 1,
     this.frameDurationMs = 20,
     this.bitrateBps = 32000,
+    this.defaultBitrateBps = 32000,
     this.rtpPort = 8990,
     this.rtcpPort = 8991,
     this.rtpPayloadType = 111,
     this.latencyModes = const ['lowLatency', 'stable'],
+    this.qualityModes = defaultAudioQualityModes,
+    this.defaultQualityMode = 'standard',
     this.requiresApiForSend = 23,
     this.androidApi = 0,
     this.libopusVersion = '',
@@ -502,6 +539,7 @@ class AudioSupportInfo {
 
   factory AudioSupportInfo.fromMap(Map<String, dynamic> map) {
     final latencyModes = map['latencyModes'];
+    final qualityModes = map['qualityModes'];
     return AudioSupportInfo(
       audioLinkSupported: map['audioLinkSupported'] == true,
       canSend: map['canSend'] == true,
@@ -514,18 +552,35 @@ class AudioSupportInfo {
       channels: _intFromMap(map['channels'], 1),
       frameDurationMs: _intFromMap(map['frameDurationMs'], 20),
       bitrateBps: _intFromMap(map['bitrateBps'], 32000),
+      defaultBitrateBps: _intFromMap(map['defaultBitrateBps'], 32000),
       rtpPort: _intFromMap(map['rtpPort'], 8990),
       rtcpPort: _intFromMap(map['rtcpPort'], 8991),
       rtpPayloadType: _intFromMap(map['rtpPayloadType'], 111),
       latencyModes: latencyModes is List
           ? latencyModes.map((item) => item.toString()).toList()
           : const ['lowLatency', 'stable'],
+      qualityModes: qualityModes is List
+          ? qualityModes.map(_qualityInfoFromDynamic).toList()
+          : defaultAudioQualityModes,
+      defaultQualityMode: map['defaultQualityMode']?.toString() ?? 'standard',
       requiresApiForSend: _intFromMap(map['requiresApiForSend'], 23),
       androidApi: _intFromMap(map['androidApi'], 0),
       libopusVersion: map['libopusVersion']?.toString() ?? '',
       message: map['message']?.toString() ?? '',
     );
   }
+}
+
+AudioQualityInfo _qualityInfoFromDynamic(Object? value) {
+  if (value is Map) {
+    return AudioQualityInfo.fromMap(Map<String, dynamic>.from(value));
+  }
+  final qualityMode = value?.toString() ?? 'standard';
+  return defaultAudioQualityModes.firstWhere(
+    (item) => item.qualityMode == qualityMode,
+    orElse: () =>
+        const AudioQualityInfo(qualityMode: 'standard', bitrateBps: 32000),
+  );
 }
 
 int _intFromMap(Object? value, int fallback) {
@@ -566,6 +621,7 @@ class WiFiDirectState {
   final AudioSupportInfo audioSupport;
   final String audioMode;
   final String audioLatencyMode;
+  final String audioQualityMode;
   final String audioSource;
   final String audioEncoding;
   final String audioState;
@@ -606,6 +662,7 @@ class WiFiDirectState {
     this.audioSupport = const AudioSupportInfo(),
     this.audioMode = 'receive',
     this.audioLatencyMode = 'lowLatency',
+    this.audioQualityMode = 'standard',
     this.audioSource = 'microphone',
     this.audioEncoding = 'opus',
     this.audioState = 'idle',
@@ -647,6 +704,7 @@ class WiFiDirectState {
     AudioSupportInfo? audioSupport,
     String? audioMode,
     String? audioLatencyMode,
+    String? audioQualityMode,
     String? audioSource,
     String? audioEncoding,
     String? audioState,
@@ -706,6 +764,7 @@ class WiFiDirectState {
       audioSupport: audioSupport ?? this.audioSupport,
       audioMode: audioMode ?? this.audioMode,
       audioLatencyMode: audioLatencyMode ?? this.audioLatencyMode,
+      audioQualityMode: audioQualityMode ?? this.audioQualityMode,
       audioSource: audioSource ?? this.audioSource,
       audioEncoding: audioEncoding ?? this.audioEncoding,
       audioState: audioState ?? this.audioState,
@@ -732,6 +791,9 @@ class WiFiDirectState {
       peerCapabilities.contains('audio.transport.rtp') &&
       peerCapabilities.contains('audio.rtcp') &&
       peerCapabilities.contains('audio.codec.libopus');
+
+  bool get peerSupportsAudioQualitySelection =>
+      peerCapabilities.contains('audio.quality.select');
 
   bool get isAudioActive => audioState != 'idle';
 

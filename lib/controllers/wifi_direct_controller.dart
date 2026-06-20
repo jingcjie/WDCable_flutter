@@ -9,6 +9,7 @@ import '../utils/app_logger.dart';
 class WiFiDirectController {
   static const int _maxLogCount = 200;
   static const String _audioLatencyModeKey = 'audio.latencyMode';
+  static const String _audioQualityModeKey = 'audio.qualityMode';
 
   final WiFiDirectService _service;
   late final StreamController<WiFiDirectState> _stateController;
@@ -588,6 +589,9 @@ class WiFiDirectController {
         audioLatencyMode: event.mode == 'send'
             ? event.latencyMode
             : _currentState.audioLatencyMode,
+        audioQualityMode: event.mode == 'send'
+            ? event.qualityMode
+            : _currentState.audioQualityMode,
         audioState: event.state,
         audioSource: event.source,
         audioEncoding: event.encoding,
@@ -607,7 +611,9 @@ class WiFiDirectController {
         audioState: event.state,
         audioStats: AudioLinkStats(
           latencyMode: event.latencyMode,
+          qualityMode: event.qualityMode,
           bitrateBps: event.bitrateBps,
+          configuredBitrateBps: event.configuredBitrateBps,
           bufferLevelMs: event.bufferLevelMs,
           framesSent: event.framesSent,
           framesReceived: event.framesReceived,
@@ -684,6 +690,7 @@ class WiFiDirectController {
   Future<void> _initializeState() async {
     try {
       await loadAudioLatencyMode();
+      await loadAudioQualityMode();
       final isEnabled = await _service.isWifiP2pEnabled();
       _updateState(_currentState.copyWith(isWifiP2pEnabled: isEnabled));
       final discoveryStatus = await _service.getDiscoveryStatus();
@@ -1124,11 +1131,30 @@ class WiFiDirectController {
     await DataManager.instance.setString(_audioLatencyModeKey, normalized);
   }
 
+  Future<void> loadAudioQualityMode() async {
+    final saved = await DataManager.instance.getString(
+      _audioQualityModeKey,
+      defaultValue: 'standard',
+    );
+    _updateState(
+      _currentState.copyWith(
+        audioQualityMode: _normalizeAudioQualityMode(saved),
+      ),
+    );
+  }
+
+  Future<void> setAudioQualityMode(String mode) async {
+    final normalized = _normalizeAudioQualityMode(mode);
+    _updateState(_currentState.copyWith(audioQualityMode: normalized));
+    await DataManager.instance.setString(_audioQualityModeKey, normalized);
+  }
+
   Future<void> startAudio({
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
     String? latencyMode,
+    String? qualityMode,
   }) async {
     if (!_currentState.isSessionReady) {
       _addLog('Audio cancelled: WDCable session is not ready');
@@ -1164,6 +1190,21 @@ class WiFiDirectController {
     final selectedLatencyMode = mode == 'send'
         ? (latencyMode ?? _currentState.audioLatencyMode)
         : null;
+    final selectedQualityMode = mode == 'send'
+        ? _normalizeAudioQualityMode(
+            qualityMode ?? _currentState.audioQualityMode,
+          )
+        : null;
+
+    if (selectedQualityMode != null &&
+        selectedQualityMode != 'standard' &&
+        !_currentState.peerSupportsAudioQualitySelection) {
+      const message =
+          'The connected peer does not support selectable audio quality';
+      _updateState(_currentState.copyWith(audioLastError: message));
+      _addLog('Audio send cancelled: $message');
+      return;
+    }
 
     try {
       _updateState(
@@ -1171,6 +1212,8 @@ class WiFiDirectController {
           audioMode: mode,
           audioLatencyMode:
               selectedLatencyMode ?? _currentState.audioLatencyMode,
+          audioQualityMode:
+              selectedQualityMode ?? _currentState.audioQualityMode,
           audioSource: source,
           audioEncoding: encoding,
           audioLastError: null,
@@ -1181,6 +1224,7 @@ class WiFiDirectController {
         source: source,
         encoding: encoding,
         latencyMode: selectedLatencyMode,
+        qualityMode: selectedQualityMode,
       );
       _addLog(result);
     } catch (e) {
@@ -1192,6 +1236,12 @@ class WiFiDirectController {
       );
       _addLog('Audio start failed: $e');
     }
+  }
+
+  String _normalizeAudioQualityMode(String? mode) {
+    return defaultAudioQualityModes.any((item) => item.qualityMode == mode)
+        ? mode!
+        : 'standard';
   }
 
   Future<void> stopAudio() async {

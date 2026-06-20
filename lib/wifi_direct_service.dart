@@ -216,6 +216,7 @@ class AudioStateChangedEvent extends WiFiDirectEvent {
   final String source;
   final String encoding;
   final String latencyMode;
+  final String qualityMode;
   final bool peerReady;
   final bool isStreaming;
   final String message;
@@ -227,6 +228,7 @@ class AudioStateChangedEvent extends WiFiDirectEvent {
     required this.source,
     required this.encoding,
     this.latencyMode = 'lowLatency',
+    this.qualityMode = 'standard',
     required this.peerReady,
     required this.isStreaming,
     required this.message,
@@ -238,7 +240,9 @@ class AudioStatsEvent extends WiFiDirectEvent {
   final String state;
   final int streamId;
   final String latencyMode;
+  final String qualityMode;
   final int bitrateBps;
+  final int configuredBitrateBps;
   final int bufferLevelMs;
   final int framesSent;
   final int framesReceived;
@@ -272,7 +276,9 @@ class AudioStatsEvent extends WiFiDirectEvent {
     required this.state,
     required this.streamId,
     this.latencyMode = 'lowLatency',
+    this.qualityMode = 'standard',
     required this.bitrateBps,
+    this.configuredBitrateBps = 32000,
     required this.bufferLevelMs,
     required this.framesSent,
     required this.framesReceived,
@@ -630,6 +636,7 @@ class WiFiDirectService {
               source: audioData['source']?.toString() ?? 'microphone',
               encoding: audioData['encoding']?.toString() ?? 'opus',
               latencyMode: audioData['latencyMode']?.toString() ?? 'lowLatency',
+              qualityMode: audioData['qualityMode']?.toString() ?? 'standard',
               peerReady: audioData['peerReady'] == true,
               isStreaming: audioData['isStreaming'] == true,
               message: audioData['message']?.toString() ?? '',
@@ -647,7 +654,12 @@ class WiFiDirectService {
               state: statsData['state']?.toString() ?? 'idle',
               streamId: _readInt(statsData['streamId']),
               latencyMode: statsData['latencyMode']?.toString() ?? 'lowLatency',
+              qualityMode: statsData['qualityMode']?.toString() ?? 'standard',
               bitrateBps: _readInt(statsData['bitrateBps']),
+              configuredBitrateBps: _readInt(
+                statsData['configuredBitrateBps'],
+                fallback: 32000,
+              ),
               bufferLevelMs: _readInt(statsData['bufferLevelMs']),
               framesSent: _readInt(statsData['framesSent']),
               framesReceived: _readInt(statsData['framesReceived']),
@@ -914,6 +926,7 @@ class WiFiDirectService {
     String source = 'microphone',
     String encoding = 'opus',
     String? latencyMode,
+    String? qualityMode,
   }) async {
     try {
       final arguments = <String, Object?>{
@@ -923,6 +936,9 @@ class WiFiDirectService {
       };
       if (latencyMode != null) {
         arguments['latencyMode'] = latencyMode;
+      }
+      if (qualityMode != null) {
+        arguments['qualityMode'] = qualityMode;
       }
       final String result = await _channel.invokeMethod(
         'startAudio',
@@ -947,10 +963,10 @@ class WiFiDirectService {
     _eventController.close();
   }
 
-  int _readInt(Object? value) {
+  int _readInt(Object? value, {int fallback = 0}) {
     if (value is int) return value;
     if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 }
 

@@ -853,6 +853,7 @@ class SessionManager(
                 .put(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP)
                 .put(ProtocolConstants.CAPABILITY_AUDIO_RTCP)
                 .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
+                .put(ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT)
         }
         return capabilities
     }
@@ -1912,7 +1913,8 @@ class SessionManager(
                 ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS,
                 ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP,
                 ProtocolConstants.CAPABILITY_AUDIO_RTCP,
-                ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS
+                ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS,
+                ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT
             )
         }
         return capabilities

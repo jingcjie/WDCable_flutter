@@ -112,6 +112,9 @@ class AudioService(
     private var latencyMode: AudioLatencyMode = AudioLatencyMode.LOW
 
     @Volatile
+    private var qualityMode: String = AudioProtocol.QUALITY_STANDARD
+
+    @Volatile
     private var streamBitrateBps: Int = AudioProtocol.BITRATE_BPS
 
     @Volatile
@@ -172,6 +175,7 @@ class AudioService(
         source: String?,
         encoding: String?,
         requestedLatencyMode: String?,
+        requestedQualityMode: String?,
         result: MethodChannel.Result
     ) {
         val normalizedMode = requestedMode ?: MODE_RECEIVE
@@ -203,6 +207,20 @@ class AudioService(
             emitAudioError(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "libopus runtime is not available", 0L)
             return
         }
+        val selectedQualityMode = if (normalizedMode == MODE_SEND) {
+            AudioProtocol.normalizeQualityMode(requestedQualityMode)
+        } else {
+            AudioProtocol.QUALITY_STANDARD
+        }
+        if (
+            normalizedMode == MODE_SEND &&
+            AudioProtocol.requiresQualitySelectionCapability(selectedQualityMode) &&
+            !peerSupportsAudioQualitySelection(info.peerCapabilities)
+        ) {
+            result.error(AudioProtocol.ERROR_RTP_UNSUPPORTED, "The connected peer does not support sender audio quality selection", null)
+            emitAudioError(AudioProtocol.ERROR_RTP_UNSUPPORTED, "The connected peer does not support sender audio quality selection", 0L)
+            return
+        }
 
         synchronized(stateLock) {
             if (state != STATE_IDLE) {
@@ -214,7 +232,8 @@ class AudioService(
             } else {
                 AudioLatencyMode.LOW
             }
-            streamBitrateBps = AudioProtocol.BITRATE_BPS
+            qualityMode = selectedQualityMode
+            streamBitrateBps = AudioProtocol.bitrateForQualityMode(selectedQualityMode)
             jitterBuffer = JitterBuffer(latencyMode)
             localTransportRole = info.transportRole
             peerAddress = info.peerAddress
@@ -365,6 +384,7 @@ class AudioService(
                         ssrc,
                         info.transportRole,
                         latencyMode.wireValue,
+                        qualityMode,
                         streamBitrateBps
                     )
                 )
@@ -417,6 +437,7 @@ class AudioService(
             peerAddress = info.peerAddress
             receiverProbeRequired = probeRequired
             latencyMode = offeredLatencyMode
+            qualityMode = offer.qualityMode
             streamBitrateBps = offer.bitrateBps
             jitterBuffer = JitterBuffer(offeredLatencyMode)
         }
@@ -429,6 +450,7 @@ class AudioService(
                     info.transportRole,
                     probeRequired,
                     offer.latencyMode,
+                    offer.qualityMode,
                     offer.bitrateBps
                 )
             )
@@ -455,7 +477,11 @@ class AudioService(
             failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted an unsupported RTP/libopus format", accept.streamId)
             return
         }
-        if (accept.latencyMode != latencyMode.wireValue || accept.bitrateBps != streamBitrateBps) {
+        if (
+            accept.latencyMode != latencyMode.wireValue ||
+            accept.qualityMode != qualityMode ||
+            accept.bitrateBps != streamBitrateBps
+        ) {
             failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted a different RTP/libopus stream configuration", accept.streamId)
             return
         }
@@ -508,6 +534,7 @@ class AudioService(
                     "rtcpBindEndpoint" to newRtcpSocket.localSocketAddress.toString(),
                     "receiverProbeRequired" to receiverProbeRequired,
                     "latencyMode" to latencyMode.wireValue,
+                    "qualityMode" to qualityMode,
                     "streamBitrateBps" to streamBitrateBps
                 )
             )
@@ -970,6 +997,7 @@ class AudioService(
             remoteSsrc = 0L
             receiverProbeRequired = false
             latencyMode = AudioLatencyMode.LOW
+            qualityMode = AudioProtocol.QUALITY_STANDARD
             streamBitrateBps = AudioProtocol.BITRATE_BPS
             jitterBuffer = JitterBuffer(AudioLatencyMode.LOW)
             rtpDestination = null
@@ -1016,6 +1044,8 @@ class AudioService(
                     "state" to state,
                     "streamId" to streamId,
                     "latencyMode" to latencyMode.wireValue,
+                    "qualityMode" to qualityMode,
+                    "configuredBitrateBps" to streamBitrateBps,
                     "bitrateBps" to bitrateBps,
                     "bufferLevelMs" to snapshot.bufferLevelMs,
                     "framesSent" to framesSent.get(),
@@ -1098,6 +1128,7 @@ class AudioService(
                 "transport" to AudioProtocol.TRANSPORT_RTP_UDP,
                 "codecImpl" to AudioProtocol.CODEC_IMPL_LIBOPUS,
                 "latencyMode" to latencyMode.wireValue,
+                "qualityMode" to qualityMode,
                 "peerReady" to peerReady,
                 "isStreaming" to (nextState == STATE_STREAMING),
                 "message" to message
@@ -1118,6 +1149,10 @@ class AudioService(
             peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP) &&
             peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_RTCP) &&
             peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
+    }
+
+    private fun peerSupportsAudioQualitySelection(peerCapabilities: Set<String>): Boolean {
+        return peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT)
     }
 
     private fun nextStreamId(): Long {

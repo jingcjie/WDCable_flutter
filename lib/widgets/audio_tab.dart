@@ -17,6 +17,7 @@ class AudioTab extends StatefulWidget {
 class _AudioTabState extends State<AudioTab> {
   String _mode = 'receive';
   String _latencyMode = 'lowLatency';
+  String _qualityMode = 'standard';
 
   @override
   void initState() {
@@ -25,9 +26,11 @@ class _AudioTabState extends State<AudioTab> {
     _latencyMode = widget.state.audioLatencyMode == 'stable'
         ? 'stable'
         : 'lowLatency';
+    _qualityMode = _normalizeQualityMode(widget.state.audioQualityMode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.controller.loadAudioSupport();
       widget.controller.loadAudioLatencyMode();
+      widget.controller.loadAudioQualityMode();
     });
   }
 
@@ -42,6 +45,9 @@ class _AudioTabState extends State<AudioTab> {
       _latencyMode = widget.state.audioLatencyMode == 'stable'
           ? 'stable'
           : 'lowLatency';
+    }
+    if (oldWidget.state.audioQualityMode != widget.state.audioQualityMode) {
+      _qualityMode = _normalizeQualityMode(widget.state.audioQualityMode);
     }
     if (!oldWidget.state.isSessionReady && widget.state.isSessionReady) {
       widget.controller.loadAudioSupport();
@@ -210,6 +216,62 @@ class _AudioTabState extends State<AudioTab> {
                       },
               ),
             ],
+            if (isSendMode) ...[
+              const SizedBox(height: 16),
+              Text(
+                AppLocalizations.of(context)!.audioQualityMode,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(
+                      value: 'standard',
+                      icon: const Icon(Icons.graphic_eq),
+                      label: Text(
+                        AppLocalizations.of(context)!.audioQualityStandard,
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: 'balanced',
+                      icon: const Icon(Icons.tune),
+                      label: Text(
+                        AppLocalizations.of(context)!.audioQualityBalanced,
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: 'high',
+                      icon: const Icon(Icons.high_quality),
+                      label: Text(
+                        AppLocalizations.of(context)!.audioQualityHigh,
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: 'nearLossless',
+                      icon: const Icon(Icons.diamond),
+                      label: Text(
+                        AppLocalizations.of(context)!.audioQualityNearLossless,
+                      ),
+                    ),
+                  ],
+                  selected: {_qualityMode},
+                  onSelectionChanged: isActive
+                      ? null
+                      : (selection) {
+                          final mode = selection.first;
+                          setState(() {
+                            _qualityMode = mode;
+                          });
+                          widget.controller.setAudioQualityMode(mode);
+                        },
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             _buildOptionRow(
               context,
@@ -225,7 +287,11 @@ class _AudioTabState extends State<AudioTab> {
               context,
               icon: Icons.settings_voice,
               title: AppLocalizations.of(context)!.audioEncoding,
-              value: AppLocalizations.of(context)!.audioOpus32Kbps,
+              value: _formatOpusQuality(
+                isSendMode
+                    ? _qualityBitrate(_qualityMode)
+                    : widget.state.audioStats.configuredBitrateBps,
+              ),
               trailing: Text(AppLocalizations.of(context)!.audioOnlyOption),
             ),
             const SizedBox(height: 20),
@@ -238,6 +304,7 @@ class _AudioTabState extends State<AudioTab> {
                     ? () => widget.controller.startAudio(
                         mode: _mode,
                         latencyMode: isSendMode ? _latencyMode : null,
+                        qualityMode: isSendMode ? _qualityMode : null,
                       )
                     : null,
                 icon: Icon(isActive ? Icons.stop : Icons.play_arrow),
@@ -334,6 +401,14 @@ class _AudioTabState extends State<AudioTab> {
                 _buildStatTile(
                   AppLocalizations.of(context)!.audioLatency,
                   _formatLatencyMode(stats.latencyMode),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioQuality,
+                  _formatQualityMode(stats.qualityMode),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioConfiguredBitrate,
+                  _formatBitrate(stats.configuredBitrateBps),
                 ),
                 _buildStatTile(
                   AppLocalizations.of(context)!.audioBitrate,
@@ -443,5 +518,40 @@ class _AudioTabState extends State<AudioTab> {
     return value == 'stable'
         ? AppLocalizations.of(context)!.audioStable
         : AppLocalizations.of(context)!.audioLowLatency;
+  }
+
+  String _formatQualityMode(String value) {
+    switch (value) {
+      case 'balanced':
+        return AppLocalizations.of(context)!.audioQualityBalanced;
+      case 'high':
+        return AppLocalizations.of(context)!.audioQualityHigh;
+      case 'nearLossless':
+        return AppLocalizations.of(context)!.audioQualityNearLossless;
+      default:
+        return AppLocalizations.of(context)!.audioQualityStandard;
+    }
+  }
+
+  String _formatOpusQuality(int bitrateBps) {
+    return '${AppLocalizations.of(context)!.audioOpus} ${_formatBitrate(bitrateBps)}';
+  }
+
+  String _normalizeQualityMode(String value) {
+    return defaultAudioQualityModes.any((item) => item.qualityMode == value)
+        ? value
+        : 'standard';
+  }
+
+  int _qualityBitrate(String qualityMode) {
+    return widget.state.audioSupport.qualityModes
+        .firstWhere(
+          (item) => item.qualityMode == qualityMode,
+          orElse: () => defaultAudioQualityModes.firstWhere(
+            (item) => item.qualityMode == qualityMode,
+            orElse: () => defaultAudioQualityModes.first,
+          ),
+        )
+        .bitrateBps;
   }
 }

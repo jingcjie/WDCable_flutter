@@ -38,7 +38,16 @@ object AudioProtocol {
     const val SAMPLES_PER_PACKET = 960
     const val BYTES_PER_SAMPLE = 2
     const val PCM_FRAME_BYTES = SAMPLES_PER_PACKET * CHANNELS * BYTES_PER_SAMPLE
-    const val BITRATE_BPS = 32_000
+    const val QUALITY_STANDARD = "standard"
+    const val QUALITY_BALANCED = "balanced"
+    const val QUALITY_HIGH = "high"
+    const val QUALITY_NEAR_LOSSLESS = "nearLossless"
+
+    const val BITRATE_STANDARD_BPS = 32_000
+    const val BITRATE_BALANCED_BPS = 64_000
+    const val BITRATE_HIGH_BPS = 128_000
+    const val BITRATE_NEAR_LOSSLESS_BPS = 256_000
+    const val BITRATE_BPS = BITRATE_STANDARD_BPS
     const val RTP_PORT = 8990
     const val RTCP_PORT = 8991
     const val RTP_PAYLOAD_TYPE = 111
@@ -47,6 +56,13 @@ object AudioProtocol {
 
     const val LATENCY_LOW = "lowLatency"
     const val LATENCY_STABLE = "stable"
+
+    val QUALITY_BITRATES: Map<String, Int> = linkedMapOf(
+        QUALITY_STANDARD to BITRATE_STANDARD_BPS,
+        QUALITY_BALANCED to BITRATE_BALANCED_BPS,
+        QUALITY_HIGH to BITRATE_HIGH_BPS,
+        QUALITY_NEAR_LOSSLESS to BITRATE_NEAR_LOSSLESS_BPS
+    )
 
     fun receiveReady(streamId: Long): JSONObject = base(KIND_RECEIVE_READY, streamId)
 
@@ -58,6 +74,7 @@ object AudioProtocol {
         rtpSsrc: Long,
         transportRole: SessionTransportRole,
         latencyMode: String = LATENCY_LOW,
+        qualityMode: String = QUALITY_STANDARD,
         bitrateBps: Int = BITRATE_BPS
     ): JSONObject = base(KIND_OFFER, streamId)
         .put("offerId", offerId)
@@ -69,6 +86,7 @@ object AudioProtocol {
         .put("channels", CHANNELS)
         .put("frameDurationMs", FRAME_DURATION_MS)
         .put("latencyMode", latencyMode)
+        .put("qualityMode", qualityMode)
         .put("bitrateBps", bitrateBps)
         .put("rtpPayloadType", RTP_PAYLOAD_TYPE)
         .put("rtpClockRate", RTP_CLOCK_RATE)
@@ -82,6 +100,7 @@ object AudioProtocol {
         transportRole: SessionTransportRole,
         receiverProbeRequired: Boolean,
         latencyMode: String,
+        qualityMode: String,
         bitrateBps: Int
     ): JSONObject = base(KIND_ACCEPT, streamId)
         .put("offerId", offerId)
@@ -92,6 +111,7 @@ object AudioProtocol {
         .put("channels", CHANNELS)
         .put("frameDurationMs", FRAME_DURATION_MS)
         .put("latencyMode", latencyMode)
+        .put("qualityMode", qualityMode)
         .put("bitrateBps", bitrateBps)
         .put("rtpPayloadType", RTP_PAYLOAD_TYPE)
         .put("rtpClockRate", RTP_CLOCK_RATE)
@@ -108,6 +128,7 @@ object AudioProtocol {
 
     fun parseOffer(metadata: JSONObject): AudioOffer {
         requireKind(metadata, KIND_OFFER)
+        val bitrateBps = requiredInt(metadata, "bitrateBps")
         return AudioOffer(
             streamId = requiredLong(metadata, "streamId"),
             offerId = requiredString(metadata, "offerId"),
@@ -119,7 +140,8 @@ object AudioProtocol {
             channels = requiredInt(metadata, "channels"),
             frameDurationMs = requiredInt(metadata, "frameDurationMs"),
             latencyMode = requiredString(metadata, "latencyMode"),
-            bitrateBps = requiredInt(metadata, "bitrateBps"),
+            qualityMode = optionalQualityMode(metadata, bitrateBps),
+            bitrateBps = bitrateBps,
             rtpPayloadType = requiredInt(metadata, "rtpPayloadType"),
             rtpClockRate = requiredInt(metadata, "rtpClockRate"),
             rtpSsrc = requiredUnsignedInt(metadata, "rtpSsrc"),
@@ -129,6 +151,7 @@ object AudioProtocol {
 
     fun parseAccept(metadata: JSONObject): AudioAccept {
         requireKind(metadata, KIND_ACCEPT)
+        val bitrateBps = requiredInt(metadata, "bitrateBps")
         return AudioAccept(
             streamId = requiredLong(metadata, "streamId"),
             offerId = requiredString(metadata, "offerId"),
@@ -139,7 +162,8 @@ object AudioProtocol {
             channels = requiredInt(metadata, "channels"),
             frameDurationMs = requiredInt(metadata, "frameDurationMs"),
             latencyMode = requiredString(metadata, "latencyMode"),
-            bitrateBps = requiredInt(metadata, "bitrateBps"),
+            qualityMode = optionalQualityMode(metadata, bitrateBps),
+            bitrateBps = bitrateBps,
             rtpPayloadType = requiredInt(metadata, "rtpPayloadType"),
             rtpClockRate = requiredInt(metadata, "rtpClockRate"),
             rtpSsrc = requiredUnsignedInt(metadata, "rtpSsrc"),
@@ -166,7 +190,7 @@ object AudioProtocol {
             offer.channels == CHANNELS &&
             offer.frameDurationMs == FRAME_DURATION_MS &&
             isSupportedLatencyMode(offer.latencyMode) &&
-            isSupportedBitrateBps(offer.bitrateBps) &&
+            isSupportedQualityBitratePair(offer.qualityMode, offer.bitrateBps) &&
             offer.rtpPayloadType == RTP_PAYLOAD_TYPE &&
             offer.rtpClockRate == RTP_CLOCK_RATE
     }
@@ -179,7 +203,7 @@ object AudioProtocol {
             accept.channels == CHANNELS &&
             accept.frameDurationMs == FRAME_DURATION_MS &&
             isSupportedLatencyMode(accept.latencyMode) &&
-            isSupportedBitrateBps(accept.bitrateBps) &&
+            isSupportedQualityBitratePair(accept.qualityMode, accept.bitrateBps) &&
             accept.rtpPayloadType == RTP_PAYLOAD_TYPE &&
             accept.rtpClockRate == RTP_CLOCK_RATE
     }
@@ -189,7 +213,31 @@ object AudioProtocol {
     }
 
     fun isSupportedBitrateBps(value: Int): Boolean {
-        return value == BITRATE_BPS
+        return QUALITY_BITRATES.containsValue(value)
+    }
+
+    fun isSupportedQualityMode(value: String): Boolean {
+        return QUALITY_BITRATES.containsKey(value)
+    }
+
+    fun isSupportedQualityBitratePair(qualityMode: String, bitrateBps: Int): Boolean {
+        return QUALITY_BITRATES[qualityMode] == bitrateBps
+    }
+
+    fun bitrateForQualityMode(qualityMode: String?): Int {
+        return QUALITY_BITRATES[qualityMode] ?: BITRATE_BPS
+    }
+
+    fun normalizeQualityMode(qualityMode: String?): String {
+        return if (qualityMode != null && isSupportedQualityMode(qualityMode)) {
+            qualityMode
+        } else {
+            QUALITY_STANDARD
+        }
+    }
+
+    fun requiresQualitySelectionCapability(qualityMode: String): Boolean {
+        return qualityMode != QUALITY_STANDARD
     }
 
     fun receiverProbeRequired(receiverRole: SessionTransportRole): Boolean {
@@ -228,6 +276,13 @@ object AudioProtocol {
         return metadata.optInt(key)
     }
 
+    private fun optionalQualityMode(metadata: JSONObject, bitrateBps: Int): String {
+        val qualityMode = metadata.optString("qualityMode")
+        if (qualityMode.isNotBlank()) return qualityMode
+        require(bitrateBps == BITRATE_BPS) { "Missing qualityMode" }
+        return QUALITY_STANDARD
+    }
+
     private fun requiredUnsignedInt(metadata: JSONObject, key: String): Long {
         require(metadata.has(key)) { "Missing $key" }
         val value = metadata.get(key)
@@ -255,6 +310,7 @@ data class AudioOffer(
     val channels: Int,
     val frameDurationMs: Int,
     val latencyMode: String,
+    val qualityMode: String,
     val bitrateBps: Int,
     val rtpPayloadType: Int,
     val rtpClockRate: Int,
@@ -272,6 +328,7 @@ data class AudioAccept(
     val channels: Int,
     val frameDurationMs: Int,
     val latencyMode: String,
+    val qualityMode: String,
     val bitrateBps: Int,
     val rtpPayloadType: Int,
     val rtpClockRate: Int,

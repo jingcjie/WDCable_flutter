@@ -69,15 +69,30 @@ void main() {
           'audio.codec.libopus',
         ],
       );
+      final v2Quality = WiFiDirectState(
+        peerCapabilities: const [
+          'audio.link',
+          'audio.codec.opus',
+          'audio.transport.rtp',
+          'audio.rtcp',
+          'audio.codec.libopus',
+          'audio.quality.select',
+        ],
+      );
 
       expect(v1Only.peerSupportsAudio, isFalse);
       expect(v2.peerSupportsAudio, isTrue);
+      expect(v2.peerSupportsAudioQualitySelection, isFalse);
+      expect(v2Quality.peerSupportsAudio, isTrue);
+      expect(v2Quality.peerSupportsAudioQualitySelection, isTrue);
     });
 
     test('AudioLinkStats parses v2 fields with defaults', () {
       final stats = AudioLinkStats.fromMap({
         'latencyMode': 'stable',
+        'qualityMode': 'high',
         'bitrateBps': '32000',
+        'configuredBitrateBps': '128000',
         'packetLossCount': 2.0,
         'latePacketDrops': '3',
         'overflowDrops': 8,
@@ -88,7 +103,9 @@ void main() {
       });
 
       expect(stats.latencyMode, 'stable');
+      expect(stats.qualityMode, 'high');
       expect(stats.bitrateBps, 32000);
+      expect(stats.configuredBitrateBps, 128000);
       expect(stats.packetLossCount, 2);
       expect(stats.latePacketDrops, 3);
       expect(stats.overflowDrops, 8);
@@ -98,6 +115,28 @@ void main() {
       expect(stats.roundTripMs, 7);
       expect(stats.rtpPacketsSent, 0);
       expect(stats.latencyMs, -1);
+    });
+
+    test('AudioSupportInfo parses quality modes and defaults', () {
+      final support = AudioSupportInfo.fromMap({
+        'audioLinkSupported': true,
+        'canSend': true,
+        'canReceive': true,
+        'qualityModes': [
+          {'qualityMode': 'standard', 'bitrateBps': 32000},
+          {'qualityMode': 'balanced', 'bitrateBps': 64000},
+          {'qualityMode': 'high', 'bitrateBps': 128000},
+          {'qualityMode': 'nearLossless', 'bitrateBps': 256000},
+        ],
+        'defaultQualityMode': 'standard',
+        'defaultBitrateBps': 32000,
+      });
+
+      expect(support.qualityModes, hasLength(4));
+      expect(support.qualityModes.last.qualityMode, 'nearLossless');
+      expect(support.qualityModes.last.bitrateBps, 256000);
+      expect(support.defaultQualityMode, 'standard');
+      expect(support.defaultBitrateBps, 32000);
     });
   });
 
@@ -618,7 +657,9 @@ void main() {
           mode: 'receive',
           state: 'streaming',
           streamId: 44,
+          qualityMode: 'high',
           bitrateBps: 24000,
+          configuredBitrateBps: 128000,
           bufferLevelMs: 60,
           framesSent: 0,
           framesReceived: 5,
@@ -638,7 +679,9 @@ void main() {
 
       expect(controller.currentState.audioState, 'streaming');
       expect(controller.currentState.audioStreamId, 44);
+      expect(controller.currentState.audioStats.qualityMode, 'high');
       expect(controller.currentState.audioStats.bitrateBps, 24000);
+      expect(controller.currentState.audioStats.configuredBitrateBps, 128000);
       expect(controller.currentState.audioStats.bufferLevelMs, 60);
       expect(controller.currentState.audioStats.packetLossCount, 2);
       expect(controller.currentState.audioStats.latePacketDrops, 3);
@@ -729,18 +772,94 @@ void main() {
       await pumpEventQueue();
 
       await controller.setAudioLatencyMode('stable');
+      await controller.setAudioQualityMode('high');
       await controller.startAudio(mode: 'receive');
       await pumpEventQueue();
 
       expect(service.audioStartCalls, 1);
       expect(service.lastAudioMode, 'receive');
       expect(service.lastAudioLatencyMode, isNull);
+      expect(service.lastAudioQualityMode, isNull);
     });
 
-    test('send audio start passes persisted latency mode', () async {
+    test(
+      'send audio start passes persisted latency and quality mode',
+      () async {
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-audio-ready',
+            role: 'client',
+            protocolVersion: 2,
+            capabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+            ],
+            peerCapabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+              'audio.quality.select',
+            ],
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.setAudioLatencyMode('stable');
+        await controller.setAudioQualityMode('nearLossless');
+        await controller.startAudio(mode: 'send');
+        await pumpEventQueue();
+
+        expect(service.audioStartCalls, 1);
+        expect(service.lastAudioMode, 'send');
+        expect(service.lastAudioLatencyMode, 'stable');
+        expect(service.lastAudioQualityMode, 'nearLossless');
+      },
+    );
+
+    test(
+      'standard quality send is allowed without quality capability',
+      () async {
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'session-standard-quality',
+            role: 'client',
+            protocolVersion: 2,
+            capabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+            ],
+            peerCapabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+            ],
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.setAudioQualityMode('standard');
+        await controller.startAudio(mode: 'send');
+        await pumpEventQueue();
+
+        expect(service.audioStartCalls, 1);
+        expect(service.lastAudioQualityMode, 'standard');
+      },
+    );
+
+    test('higher quality send is blocked without quality capability', () async {
       service.emit(
         SessionReadyEvent(
-          sessionId: 'session-audio-ready',
+          sessionId: 'session-no-quality-capability',
           role: 'client',
           protocolVersion: 2,
           capabilities: const [
@@ -761,13 +880,15 @@ void main() {
       );
       await pumpEventQueue();
 
-      await controller.setAudioLatencyMode('stable');
+      await controller.setAudioQualityMode('high');
       await controller.startAudio(mode: 'send');
       await pumpEventQueue();
 
-      expect(service.audioStartCalls, 1);
-      expect(service.lastAudioMode, 'send');
-      expect(service.lastAudioLatencyMode, 'stable');
+      expect(service.audioStartCalls, 0);
+      expect(
+        controller.currentState.audioLastError,
+        contains('selectable audio quality'),
+      );
     });
 
     test('ignores duplicate file received completion events', () async {
@@ -804,7 +925,9 @@ void main() {
           'mode': 'receive',
           'state': 'streaming',
           'streamId': '42',
+          'qualityMode': 'nearLossless',
           'bitrateBps': 24000.0,
+          'configuredBitrateBps': '256000',
           'bufferLevelMs': '80',
           'framesSent': 1,
           'framesReceived': '2',
@@ -824,6 +947,8 @@ void main() {
         expect(events, hasLength(1));
         final stats = events.single as AudioStatsEvent;
         expect(stats.streamId, 42);
+        expect(stats.qualityMode, 'nearLossless');
+        expect(stats.configuredBitrateBps, 256000);
         expect(stats.bufferLevelMs, 80);
         expect(stats.framesReceived, 2);
         expect(stats.underflowCount, 3);
@@ -882,6 +1007,7 @@ class _FakeWiFiDirectService extends WiFiDirectService {
   int audioStartCalls = 0;
   String? lastAudioMode;
   String? lastAudioLatencyMode;
+  String? lastAudioQualityMode;
   final List<String> sentMessages = [];
 
   @override
@@ -974,10 +1100,18 @@ class _FakeWiFiDirectService extends WiFiDirectService {
       'transport': 'rtp-udp',
       'source': 'microphone',
       'bitrateBps': 32000,
+      'defaultBitrateBps': 32000,
       'rtpPort': 8990,
       'rtcpPort': 8991,
       'rtpPayloadType': 111,
       'latencyModes': ['lowLatency', 'stable'],
+      'qualityModes': [
+        {'qualityMode': 'standard', 'bitrateBps': 32000},
+        {'qualityMode': 'balanced', 'bitrateBps': 64000},
+        {'qualityMode': 'high', 'bitrateBps': 128000},
+        {'qualityMode': 'nearLossless', 'bitrateBps': 256000},
+      ],
+      'defaultQualityMode': 'standard',
       'message': 'Audio Link is supported',
     };
   }
@@ -988,10 +1122,12 @@ class _FakeWiFiDirectService extends WiFiDirectService {
     String source = 'microphone',
     String encoding = 'opus',
     String? latencyMode,
+    String? qualityMode,
   }) async {
     audioStartCalls++;
     lastAudioMode = mode;
     lastAudioLatencyMode = latencyMode;
+    lastAudioQualityMode = qualityMode;
     return 'Audio started';
   }
 

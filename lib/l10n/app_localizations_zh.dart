@@ -417,7 +417,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioStable => '稳定';
 
   @override
+  String get audioQualityMode => '质量';
+
+  @override
+  String get audioQualityStandard => '标准';
+
+  @override
+  String get audioQualityBalanced => '平衡';
+
+  @override
+  String get audioQualityHigh => '高';
+
+  @override
+  String get audioQualityNearLossless => '近无损';
+
+  @override
   String get audioEncoding => '编码';
+
+  @override
+  String get audioOpus => 'Opus';
 
   @override
   String get audioOpus32Kbps => 'Opus 32 kbps';
@@ -439,6 +457,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioBitrate => '比特率';
+
+  @override
+  String get audioConfiguredBitrate => '配置';
+
+  @override
+  String get audioQuality => '质量';
 
   @override
   String get audioBuffer => '缓冲';
