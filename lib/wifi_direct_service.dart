@@ -35,6 +35,8 @@ class NativeStateChangedEvent extends WiFiDirectEvent {
   bool get serviceRegistered => data['serviceRegistered'] == true;
   String get peerAddress => data['peerAddress']?.toString() ?? '';
   String get peerName => data['peerName']?.toString() ?? '';
+  String get wifiRole => data['wifiRole']?.toString() ?? '';
+  String get transportRole => data['transportRole']?.toString() ?? '';
   int get reasonCode => _readEventInt(data['reasonCode'], fallback: -1);
   String get reasonName => data['reasonName']?.toString() ?? '';
   String get callback => data['callback']?.toString() ?? '';
@@ -61,6 +63,7 @@ class SessionStateChangedEvent extends WiFiDirectEvent {
   final String state;
   final String sessionId;
   final String role;
+  final String transportRole;
   final String groupOwnerAddress;
   final String disconnectReason;
 
@@ -68,6 +71,7 @@ class SessionStateChangedEvent extends WiFiDirectEvent {
     required this.state,
     required this.sessionId,
     required this.role,
+    this.transportRole = '',
     required this.groupOwnerAddress,
     required this.disconnectReason,
   });
@@ -76,6 +80,7 @@ class SessionStateChangedEvent extends WiFiDirectEvent {
 class SessionReadyEvent extends WiFiDirectEvent {
   final String sessionId;
   final String role;
+  final String transportRole;
   final int protocolVersion;
   final List<String> capabilities;
   final List<String> peerCapabilities;
@@ -83,6 +88,7 @@ class SessionReadyEvent extends WiFiDirectEvent {
   SessionReadyEvent({
     required this.sessionId,
     required this.role,
+    this.transportRole = '',
     required this.protocolVersion,
     required this.capabilities,
     this.peerCapabilities = const [],
@@ -365,6 +371,7 @@ class WiFiDirectService {
               state: sessionData['state']?.toString() ?? 'Disconnected',
               sessionId: sessionData['sessionId']?.toString() ?? '',
               role: sessionData['role']?.toString() ?? '',
+              transportRole: sessionData['transportRole']?.toString() ?? '',
               groupOwnerAddress:
                   sessionData['groupOwnerAddress']?.toString() ?? '',
               disconnectReason:
@@ -383,6 +390,7 @@ class WiFiDirectService {
             SessionReadyEvent(
               sessionId: sessionData['sessionId']?.toString() ?? '',
               role: sessionData['role']?.toString() ?? '',
+              transportRole: sessionData['transportRole']?.toString() ?? '',
               protocolVersion: sessionData['protocolVersion'] is int
                   ? sessionData['protocolVersion'] as int
                   : int.tryParse(

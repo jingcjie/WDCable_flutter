@@ -1298,6 +1298,8 @@ class WiFiDirectManager(
             "peerName" to (pendingPeerName ?: ""),
             "groupFormed" to connectedGroupFormed,
             "isGroupOwner" to isGroupOwner,
+            "wifiRole" to wifiRoleName(connectedGroupFormed, isGroupOwner),
+            "transportRole" to transportRoleName(connectedGroupFormed, isGroupOwner),
             "groupOwnerAddress" to groupOwnerAddress,
             "reasonCode" to (lastReasonCode ?: -1),
             "reasonName" to lastReasonName,
@@ -1343,6 +1345,8 @@ class WiFiDirectManager(
             "listenState",
             "groupFormed",
             "isGroupOwner",
+            "wifiRole",
+            "transportRole",
             "groupOwnerAddress"
         )
         val values = keys.joinToString(" | ") { key -> "$key=${fields[key] ?: ""}" }
@@ -1440,7 +1444,19 @@ class WiFiDirectManager(
         return mapOf(
             "isConnected" to isConnected,
             "isGroupOwner" to isGroupOwner,
+            "wifiRole" to wifiRoleName(isConnected, isGroupOwner),
+            "transportRole" to transportRoleName(isConnected, isGroupOwner),
             "groupOwnerAddress" to groupOwnerAddress
         )
+    }
+
+    private fun wifiRoleName(isConnected: Boolean, isGroupOwner: Boolean): String {
+        if (!isConnected) return ""
+        return if (isGroupOwner) "groupOwner" else "client"
+    }
+
+    private fun transportRoleName(isConnected: Boolean, isGroupOwner: Boolean): String {
+        if (!isConnected) return ""
+        return if (isGroupOwner) "connector" else "listener"
     }
 }

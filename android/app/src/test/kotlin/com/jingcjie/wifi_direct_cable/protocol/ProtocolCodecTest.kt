@@ -120,7 +120,7 @@ class ProtocolCodecTest {
                 channel = ProtocolChannel.CONTROL
             )
         )
-        encoded[5] = 2
+        encoded[5] = 1
 
         assertProtocolError(ProtocolError.UNSUPPORTED_VERSION) {
             ProtocolCodec.readFrame(ByteArrayInputStream(encoded))

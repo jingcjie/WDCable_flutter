@@ -55,7 +55,13 @@ object DiagnosticsLogger {
             "listenState",
             "groupFormed",
             "isGroupOwner",
-            "groupOwnerAddress"
+            "wifiRole",
+            "transportRole",
+            "groupOwnerAddress",
+            "localEndpoint",
+            "remoteEndpoint",
+            "rendezvousId",
+            "failureReason"
         )
         return buildString {
             appendLine("WDCable Android Diagnostics")
@@ -77,7 +83,13 @@ object DiagnosticsLogger {
                     "listenState" to "",
                     "groupFormed" to "",
                     "isGroupOwner" to "",
-                    "groupOwnerAddress" to ""
+                    "wifiRole" to "",
+                    "transportRole" to "",
+                    "groupOwnerAddress" to "",
+                    "localEndpoint" to "",
+                    "remoteEndpoint" to "",
+                    "rendezvousId" to "",
+                    "failureReason" to ""
                 )
                 fieldsWithDefaults.putAll(entry.fields)
                 append(timestampFormat.format(Date(entry.timestampMs)))

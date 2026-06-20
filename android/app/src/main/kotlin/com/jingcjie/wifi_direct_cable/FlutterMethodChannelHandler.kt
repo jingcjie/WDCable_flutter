@@ -195,6 +195,7 @@ class FlutterMethodChannelHandler(
             "deviceName" to Build.MODEL,
             "deviceAddress" to "Unavailable",
             "isGroupOwner" to (stats["isGroupOwner"] as? Boolean ?: false),
+            "transportRole" to (stats["transportRole"] as? String ?: ""),
             "chatServerRunning" to (stats["controlChannelOpen"] as? Boolean ?: false),
             "speedTestServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
             "fileTransferServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),

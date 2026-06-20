@@ -68,18 +68,29 @@ class WiFiDirectDevice {
 class WiFiDirectConnectionInfo {
   final bool isConnected;
   final bool isGroupOwner;
+  final String wifiRole;
+  final String transportRole;
   final String? groupOwnerAddress;
 
   WiFiDirectConnectionInfo({
     required this.isConnected,
     required this.isGroupOwner,
+    String? wifiRole,
+    String? transportRole,
     this.groupOwnerAddress,
-  });
+  }) : wifiRole = wifiRole ?? (isConnected ? _wifiRoleFor(isGroupOwner) : ''),
+       transportRole =
+           transportRole ??
+           (isConnected ? _transportRoleFor(isGroupOwner) : '');
 
   factory WiFiDirectConnectionInfo.fromMap(Map<String, dynamic> map) {
+    final isConnected = map['isConnected'] == true;
+    final isGroupOwner = map['isGroupOwner'] == true;
     return WiFiDirectConnectionInfo(
-      isConnected: map['isConnected'] ?? false,
-      isGroupOwner: map['isGroupOwner'] ?? false,
+      isConnected: isConnected,
+      isGroupOwner: isGroupOwner,
+      wifiRole: map['wifiRole']?.toString(),
+      transportRole: map['transportRole']?.toString(),
       groupOwnerAddress: map['groupOwnerAddress'],
     );
   }
@@ -88,6 +99,8 @@ class WiFiDirectConnectionInfo {
     return {
       'isConnected': isConnected,
       'isGroupOwner': isGroupOwner,
+      'wifiRole': wifiRole,
+      'transportRole': transportRole,
       'groupOwnerAddress': groupOwnerAddress,
     };
   }
@@ -95,15 +108,38 @@ class WiFiDirectConnectionInfo {
   WiFiDirectConnectionInfo copyWith({
     bool? isConnected,
     bool? isGroupOwner,
+    String? wifiRole,
+    String? transportRole,
     String? groupOwnerAddress,
   }) {
+    final nextConnected = isConnected ?? this.isConnected;
+    final nextGroupOwner = isGroupOwner ?? this.isGroupOwner;
+    final roleChanged = isConnected != null || isGroupOwner != null;
     return WiFiDirectConnectionInfo(
-      isConnected: isConnected ?? this.isConnected,
-      isGroupOwner: isGroupOwner ?? this.isGroupOwner,
+      isConnected: nextConnected,
+      isGroupOwner: nextGroupOwner,
+      wifiRole:
+          wifiRole ??
+          (nextConnected
+              ? (roleChanged ? _wifiRoleFor(nextGroupOwner) : this.wifiRole)
+              : ''),
+      transportRole:
+          transportRole ??
+          (nextConnected
+              ? (roleChanged
+                    ? _transportRoleFor(nextGroupOwner)
+                    : this.transportRole)
+              : ''),
       groupOwnerAddress: groupOwnerAddress ?? this.groupOwnerAddress,
     );
   }
 }
+
+String _wifiRoleFor(bool isGroupOwner) =>
+    isGroupOwner ? 'groupOwner' : 'client';
+
+String _transportRoleFor(bool isGroupOwner) =>
+    isGroupOwner ? 'connector' : 'listener';
 
 class ChatMessage {
   final String content;
@@ -370,6 +406,7 @@ class WiFiDirectState {
   final String sessionState;
   final String? sessionId;
   final String? sessionRole;
+  final String? sessionTransportRole;
   final String? disconnectReason;
   final List<String> logs;
   final List<String> sessionCapabilities;
@@ -408,6 +445,7 @@ class WiFiDirectState {
     this.sessionState = 'Disconnected',
     this.sessionId,
     this.sessionRole,
+    this.sessionTransportRole,
     this.disconnectReason,
     this.logs = const [],
     this.sessionCapabilities = const [],
@@ -447,6 +485,7 @@ class WiFiDirectState {
     String? sessionState,
     Object? sessionId = _unset,
     Object? sessionRole = _unset,
+    Object? sessionTransportRole = _unset,
     Object? disconnectReason = _unset,
     List<String>? logs,
     List<String>? sessionCapabilities,
@@ -496,6 +535,9 @@ class WiFiDirectState {
       sessionRole: identical(sessionRole, _unset)
           ? this.sessionRole
           : sessionRole as String?,
+      sessionTransportRole: identical(sessionTransportRole, _unset)
+          ? this.sessionTransportRole
+          : sessionTransportRole as String?,
       disconnectReason: identical(disconnectReason, _unset)
           ? this.disconnectReason
           : disconnectReason as String?,

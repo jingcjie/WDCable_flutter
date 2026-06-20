@@ -47,6 +47,7 @@ class WiFiDirectController {
       sessionState: 'Disconnected',
       sessionId: null,
       sessionRole: null,
+      sessionTransportRole: null,
       disconnectReason: null,
       lastSpeedTest: null,
       isSpeedTesting: false,
@@ -175,6 +176,9 @@ class WiFiDirectController {
                 ? null
                 : sessionEvent.sessionId,
             sessionRole: sessionEvent.role.isEmpty ? null : sessionEvent.role,
+            sessionTransportRole: sessionEvent.transportRole.isEmpty
+                ? null
+                : sessionEvent.transportRole,
             disconnectReason: sessionEvent.disconnectReason.isEmpty
                 ? _currentState.disconnectReason
                 : sessionEvent.disconnectReason,
@@ -185,11 +189,17 @@ class WiFiDirectController {
         break;
 
       case SessionReadyEvent sessionEvent:
+        final roleLabel = sessionEvent.transportRole.isEmpty
+            ? sessionEvent.role
+            : '${sessionEvent.role}/${sessionEvent.transportRole}';
         _updateState(
           _currentState.copyWith(
             sessionState: 'Ready',
             sessionId: sessionEvent.sessionId,
             sessionRole: sessionEvent.role,
+            sessionTransportRole: sessionEvent.transportRole.isEmpty
+                ? null
+                : sessionEvent.transportRole,
             disconnectReason: null,
             isConnecting: false,
             pendingPeerAddress: null,
@@ -200,7 +210,7 @@ class WiFiDirectController {
           ),
         );
         _addLog(
-          'WDCable session ready (${sessionEvent.role}, protocol v${sessionEvent.protocolVersion})',
+          'WDCable session ready ($roleLabel, protocol v${sessionEvent.protocolVersion})',
         );
         loadAudioSupport();
         break;
@@ -763,6 +773,7 @@ class WiFiDirectController {
       _addLog('Service Registered: ${settings['serviceRegistered'] ?? false}');
       _addLog('Operation ID: ${settings['operationId'] ?? 0}');
       _addLog('Is Group Owner: ${settings['isGroupOwner'] ?? false}');
+      _addLog('Transport Role: ${settings['transportRole'] ?? ''}');
       _addLog('Chat Server Running: ${settings['chatServerRunning'] ?? false}');
       _addLog(
         'Speed Test Server Running: ${settings['speedTestServerRunning'] ?? false}',
@@ -799,6 +810,7 @@ class WiFiDirectController {
         'sessionState': _currentState.sessionState,
         'sessionId': _currentState.sessionId,
         'sessionRole': _currentState.sessionRole,
+        'sessionTransportRole': _currentState.sessionTransportRole,
         'disconnectReason': _currentState.disconnectReason,
         'lastNativeError': _currentState.lastNativeError,
         'peersCount': _currentState.peers.length,

@@ -283,7 +283,7 @@ void main() {
           SessionReadyEvent(
             sessionId: 'session-1',
             role: 'client',
-            protocolVersion: 1,
+            protocolVersion: 2,
             capabilities: const ['control.chat'],
           ),
         );
@@ -327,7 +327,7 @@ void main() {
           SessionReadyEvent(
             sessionId: 'session-failure',
             role: 'client',
-            protocolVersion: 1,
+            protocolVersion: 2,
             capabilities: const [
               'control.chat',
               'audio.link',
@@ -459,7 +459,7 @@ void main() {
           SessionReadyEvent(
             sessionId: 'session-recover',
             role: 'client',
-            protocolVersion: 1,
+            protocolVersion: 2,
             capabilities: const ['control.chat'],
           ),
         );
@@ -496,7 +496,7 @@ void main() {
           SessionReadyEvent(
             sessionId: 'session-recover',
             role: 'client',
-            protocolVersion: 1,
+            protocolVersion: 2,
             capabilities: const ['control.chat'],
           ),
         );
@@ -529,7 +529,7 @@ void main() {
         SessionReadyEvent(
           sessionId: 'session-audio',
           role: 'client',
-          protocolVersion: 1,
+          protocolVersion: 2,
           capabilities: const ['audio.link', 'audio.codec.opus'],
           peerCapabilities: const ['audio.link', 'audio.codec.opus'],
         ),
@@ -601,7 +601,7 @@ void main() {
           SessionReadyEvent(
             sessionId: 'session-no-audio',
             role: 'client',
-            protocolVersion: 1,
+            protocolVersion: 2,
             capabilities: const ['audio.link', 'audio.codec.opus'],
             peerCapabilities: const ['control.chat'],
           ),
@@ -624,7 +624,7 @@ void main() {
         SessionReadyEvent(
           sessionId: 'session-audio-ready',
           role: 'client',
-          protocolVersion: 1,
+          protocolVersion: 2,
           capabilities: const ['audio.link', 'audio.codec.opus'],
           peerCapabilities: const ['audio.link', 'audio.codec.opus'],
         ),
