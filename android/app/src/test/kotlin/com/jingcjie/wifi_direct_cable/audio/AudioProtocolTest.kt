@@ -285,4 +285,174 @@ class AudioProtocolTest {
             )
         )
     }
+
+    @Test
+    fun probePayloadsUseCanonicalWireFormat() {
+        assertEquals("WDA2RTP", AudioProtocol.RTP_PROBE_PAYLOAD.toString(Charsets.US_ASCII))
+        assertEquals("WDA2RTCP", AudioProtocol.RTCP_PROBE_PAYLOAD.toString(Charsets.US_ASCII))
+        assertTrue(
+            AudioProtocol.isRtpProbePayload(
+                AudioProtocol.RTP_PROBE_PAYLOAD,
+                AudioProtocol.RTP_PROBE_PAYLOAD.size
+            )
+        )
+        assertTrue(
+            AudioProtocol.isRtcpProbePayload(
+                AudioProtocol.RTCP_PROBE_PAYLOAD,
+                AudioProtocol.RTCP_PROBE_PAYLOAD.size
+            )
+        )
+        assertFalse(AudioProtocol.isRtpProbePayload("WDA2RTPX".toByteArray(), 8))
+        assertFalse(
+            AudioProtocol.isRtcpProbePayload(
+                "WDCABLE-AUDIO-RTCP-PROBE".toByteArray(),
+                "WDCABLE-AUDIO-RTCP-PROBE".length
+            )
+        )
+    }
+
+    @Test
+    fun offerSourcesAcceptMicrophoneAndSystemAudioOnly() {
+        val microphone = AudioProtocol.parseOffer(
+            AudioProtocol.offer(71L, "mic", 1L, SessionTransportRole.LISTENER)
+        )
+        val systemAudioMetadata = AudioProtocol.offer(
+            72L,
+            "system",
+            2L,
+            SessionTransportRole.LISTENER
+        ).put("source", AudioProtocol.SOURCE_SYSTEM_AUDIO)
+        val unknownMetadata = AudioProtocol.offer(
+            73L,
+            "unknown",
+            3L,
+            SessionTransportRole.LISTENER
+        ).put("source", "lineIn")
+
+        assertTrue(AudioProtocol.validateOffer(microphone))
+        assertTrue(AudioProtocol.validateOffer(AudioProtocol.parseOffer(systemAudioMetadata)))
+        assertFalse(AudioProtocol.validateOffer(AudioProtocol.parseOffer(unknownMetadata)))
+    }
+
+    @Test
+    fun parsesCanonicalWindowsSystemAudioOfferFixture() {
+        val json = """
+            {
+              "kind": "audio.offer",
+              "streamId": 42,
+              "offerId": "windows-system-audio",
+              "transport": "rtp-udp",
+              "source": "systemAudio",
+              "codec": "opus",
+              "codecImpl": "libopus",
+              "sampleRate": 48000,
+              "channels": 1,
+              "frameDurationMs": 20,
+              "latencyMode": "lowLatency",
+              "qualityMode": "standard",
+              "bitrateBps": 32000,
+              "rtpPayloadType": 111,
+              "rtpClockRate": 48000,
+              "rtpSsrc": 16909060,
+              "transportRole": "listener"
+            }
+        """.trimIndent()
+
+        val offer = AudioProtocol.parseOffer(JSONObject(json))
+
+        assertEquals(AudioProtocol.SOURCE_SYSTEM_AUDIO, offer.source)
+        assertEquals(null, AudioProtocol.offerRejectionReason(offer))
+    }
+
+    @Test
+    fun offerValidationReportsExactRejectedField() {
+        val valid = validOffer()
+
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(transport = "tcp")), "transport=tcp")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(source = "lineIn")), "source=lineIn")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(codec = "pcm")), "codec=pcm")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(codecImpl = "other")), "codecImpl=other")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(sampleRate = 44_100)), "sampleRate=44100")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(channels = 2)), "channels=2")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(frameDurationMs = 10)), "frameDurationMs=10")
+        assertRejected(
+            AudioProtocol.offerRejectionReason(valid.copy(latencyMode = "receiverChoice")),
+            "latencyMode=receiverChoice"
+        )
+        assertRejected(
+            AudioProtocol.offerRejectionReason(
+                valid.copy(
+                    qualityMode = AudioProtocol.QUALITY_HIGH,
+                    bitrateBps = AudioProtocol.BITRATE_STANDARD_BPS
+                )
+            ),
+            "qualityMode=high,bitrateBps=32000"
+        )
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(rtpPayloadType = 96)), "rtpPayloadType=96")
+        assertRejected(AudioProtocol.offerRejectionReason(valid.copy(rtpClockRate = 44_100)), "rtpClockRate=44100")
+    }
+
+    @Test
+    fun acceptValidationReportsExactRejectedField() {
+        val valid = validAccept()
+
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(transport = "tcp")), "transport=tcp")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(codec = "pcm")), "codec=pcm")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(codecImpl = "other")), "codecImpl=other")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(sampleRate = 44_100)), "sampleRate=44100")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(channels = 2)), "channels=2")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(frameDurationMs = 10)), "frameDurationMs=10")
+        assertRejected(
+            AudioProtocol.acceptRejectionReason(valid.copy(latencyMode = "receiverChoice")),
+            "latencyMode=receiverChoice"
+        )
+        assertRejected(
+            AudioProtocol.acceptRejectionReason(
+                valid.copy(
+                    qualityMode = AudioProtocol.QUALITY_HIGH,
+                    bitrateBps = AudioProtocol.BITRATE_STANDARD_BPS
+                )
+            ),
+            "qualityMode=high,bitrateBps=32000"
+        )
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(rtpPayloadType = 96)), "rtpPayloadType=96")
+        assertRejected(AudioProtocol.acceptRejectionReason(valid.copy(rtpClockRate = 44_100)), "rtpClockRate=44100")
+    }
+
+    @Test
+    fun sameNegotiationRequiresMatchingStreamAndOfferIds() {
+        assertTrue(AudioProtocol.isSameNegotiation(7L, "offer-a", 7L, "offer-a"))
+        assertFalse(AudioProtocol.isSameNegotiation(7L, "offer-a", 8L, "offer-a"))
+        assertFalse(AudioProtocol.isSameNegotiation(7L, "offer-a", 7L, "offer-b"))
+    }
+
+    private fun validOffer(): AudioOffer {
+        return AudioProtocol.parseOffer(
+            AudioProtocol.offer(
+                streamId = 81L,
+                offerId = "valid-offer",
+                rtpSsrc = 1L,
+                transportRole = SessionTransportRole.LISTENER
+            ).put("source", AudioProtocol.SOURCE_SYSTEM_AUDIO)
+        )
+    }
+
+    private fun validAccept(): AudioAccept {
+        return AudioProtocol.parseAccept(
+            AudioProtocol.accept(
+                streamId = 82L,
+                offerId = "valid-accept",
+                rtpSsrc = 2L,
+                transportRole = SessionTransportRole.CONNECTOR,
+                receiverProbeRequired = true,
+                latencyMode = AudioProtocol.LATENCY_LOW,
+                qualityMode = AudioProtocol.QUALITY_STANDARD,
+                bitrateBps = AudioProtocol.BITRATE_STANDARD_BPS
+            )
+        )
+    }
+
+    private fun assertRejected(reason: String?, expected: String) {
+        assertTrue("Expected rejection containing $expected, received $reason", reason?.contains(expected) == true)
+    }
 }

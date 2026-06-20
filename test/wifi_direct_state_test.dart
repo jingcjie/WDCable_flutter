@@ -692,6 +692,18 @@ void main() {
       expect(controller.currentState.audioStats.roundTripMs, 7);
 
       service.emit(
+        AudioStateChangedEvent(
+          mode: 'idle',
+          state: 'idle',
+          streamId: 0,
+          source: 'microphone',
+          encoding: 'opus',
+          peerReady: false,
+          isStreaming: false,
+          message: 'peer_error',
+        ),
+      );
+      service.emit(
         AudioErrorEvent(
           code: 'audio_receiver_not_ready',
           message: 'Receiver has not started',

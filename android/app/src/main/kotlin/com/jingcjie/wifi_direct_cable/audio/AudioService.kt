@@ -109,6 +109,9 @@ class AudioService(
     private var receiverProbeRequired: Boolean = false
 
     @Volatile
+    private var streamSource: String = AudioProtocol.SOURCE_MICROPHONE
+
+    @Volatile
     private var latencyMode: AudioLatencyMode = AudioLatencyMode.LOW
 
     @Volatile
@@ -311,8 +314,8 @@ class AudioService(
     }
 
     override fun onAudioFeatureError(code: String, message: String, streamId: Long) {
-        emitAudioError(code, message, streamId)
         cleanupLocal("peer_error", emitStopped = true)
+        emitAudioError(code, message, streamId)
     }
 
     override fun onAudioTransportClosed(reason: String) {
@@ -334,6 +337,7 @@ class AudioService(
             localSsrc = randomSsrc()
             remoteSsrc = 0L
             receiverProbeRequired = false
+            streamSource = AudioProtocol.SOURCE_MICROPHONE
         }
         resetStats()
         controlExecutor.execute {
@@ -373,6 +377,7 @@ class AudioService(
             localTransportRole = info.transportRole
             peerAddress = info.peerAddress
             receiverProbeRequired = false
+            streamSource = AudioProtocol.SOURCE_MICROPHONE
         }
         resetStats()
         controlExecutor.execute {
@@ -413,12 +418,34 @@ class AudioService(
             sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_TRANSPORT_FAILED, "The WDCable session is not ready")
             return
         }
+        if (
+            mode == MODE_RECEIVE &&
+            (state == STATE_CONNECTING || state == STATE_STREAMING) &&
+            AudioProtocol.isSameNegotiation(streamId, offerId, offer.streamId, offer.offerId)
+        ) {
+            DiagnosticsLogger.log(
+                "audio",
+                "Duplicate audio offer ignored",
+                mapOf("streamId" to offer.streamId, "offerId" to offer.offerId)
+            )
+            return
+        }
         if (state != STATE_RECEIVE_READY || mode != MODE_RECEIVE) {
             sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_RECEIVER_NOT_READY, "Receiver has not started Audio Link receive mode")
             return
         }
-        if (!AudioProtocol.validateOffer(offer)) {
-            sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_RTP_UNSUPPORTED, "Unsupported RTP/libopus audio offer")
+        val offerRejectionReason = AudioProtocol.offerRejectionReason(offer)
+        if (offerRejectionReason != null) {
+            DiagnosticsLogger.log(
+                "audio",
+                "Audio offer rejected",
+                mapOf("streamId" to offer.streamId, "reason" to offerRejectionReason)
+            )
+            sessionManager.sendAudioError(
+                offer.streamId,
+                AudioProtocol.ERROR_RTP_UNSUPPORTED,
+                "Unsupported RTP/libopus audio offer: $offerRejectionReason"
+            )
             return
         }
 
@@ -436,6 +463,7 @@ class AudioService(
             localTransportRole = info.transportRole
             peerAddress = info.peerAddress
             receiverProbeRequired = probeRequired
+            streamSource = offer.source
             latencyMode = offeredLatencyMode
             qualityMode = offer.qualityMode
             streamBitrateBps = offer.bitrateBps
@@ -473,8 +501,21 @@ class AudioService(
         if (!isSender || accept.streamId != streamId || accept.offerId != offerId) {
             return
         }
-        if (!AudioProtocol.validateAccept(accept)) {
-            failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted an unsupported RTP/libopus format", accept.streamId)
+        if (state == STATE_CONNECTING || state == STATE_STREAMING) {
+            DiagnosticsLogger.log(
+                "audio",
+                "Duplicate audio accept ignored",
+                mapOf("streamId" to accept.streamId, "offerId" to accept.offerId)
+            )
+            return
+        }
+        val acceptRejectionReason = AudioProtocol.acceptRejectionReason(accept)
+        if (acceptRejectionReason != null) {
+            failAudio(
+                AudioProtocol.ERROR_RTP_UNSUPPORTED,
+                "Peer accepted an unsupported RTP/libopus format: $acceptRejectionReason",
+                accept.streamId
+            )
             return
         }
         if (
@@ -482,7 +523,13 @@ class AudioService(
             accept.qualityMode != qualityMode ||
             accept.bitrateBps != streamBitrateBps
         ) {
-            failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted a different RTP/libopus stream configuration", accept.streamId)
+            failAudio(
+                AudioProtocol.ERROR_RTP_UNSUPPORTED,
+                "Peer accepted a different RTP/libopus stream configuration: " +
+                    "offered latencyMode=${latencyMode.wireValue},qualityMode=$qualityMode,bitrateBps=$streamBitrateBps; " +
+                    "accepted latencyMode=${accept.latencyMode},qualityMode=${accept.qualityMode},bitrateBps=${accept.bitrateBps}",
+                accept.streamId
+            )
             return
         }
 
@@ -582,7 +629,16 @@ class AudioService(
             }
             if (!running.get()) return@Thread
             if (rtpDestination == null || rtcpDestination == null) {
-                failAudio(AudioProtocol.ERROR_RTP_PROBE_TIMEOUT, "Timed out waiting for receiver UDP path probe", streamId)
+                val details =
+                    "role=${localTransportRole.eventName} " +
+                        "rtpLocal=${socketEndpoint(rtpSocket)} rtpDestination=${rtpDestination ?: "unknown"} " +
+                        "rtcpLocal=${socketEndpoint(rtcpSocket)} rtcpDestination=${rtcpDestination ?: "unknown"} " +
+                        "socketError=no_probe_received"
+                failAudio(
+                    AudioProtocol.ERROR_RTP_PROBE_TIMEOUT,
+                    "Timed out waiting for receiver UDP path probe. $details",
+                    streamId
+                )
                 return@Thread
             }
             startCapture()
@@ -597,13 +653,20 @@ class AudioService(
             val rtpProbeTarget = InetSocketAddress(host, AudioProtocol.RTP_PORT)
             val rtcpProbeTarget = InetSocketAddress(host, AudioProtocol.RTCP_PORT)
             while (running.get() && rtpPacketsReceived.get() == 0L) {
-                try {
-                    sendDatagram(rtpSocket, rtpProbeTarget, RTP_PROBE)
-                    sendDatagram(rtcpSocket, rtcpProbeTarget, RTCP_PROBE)
+                val rtpSent = sendProbeDatagram(
+                    "RTP",
+                    rtpSocket,
+                    rtpProbeTarget,
+                    AudioProtocol.RTP_PROBE_PAYLOAD
+                )
+                val rtcpSent = sendProbeDatagram(
+                    "RTCP",
+                    rtcpSocket,
+                    rtcpProbeTarget,
+                    AudioProtocol.RTCP_PROBE_PAYLOAD
+                )
+                if (rtpSent && rtcpSent) {
                     DiagnosticsLogger.log("audio", "UDP audio path probe sent", mapOf("rtpTarget" to rtpProbeTarget.toString(), "rtcpTarget" to rtcpProbeTarget.toString()))
-                } catch (exception: Exception) {
-                    udpSendErrors.incrementAndGet()
-                    DiagnosticsLogger.log("audio", "UDP audio path probe failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
                 }
                 Thread.sleep(PROBE_INTERVAL_MS)
             }
@@ -619,7 +682,7 @@ class AudioService(
                     val packet = DatagramPacket(buffer, buffer.size)
                     val socket = rtpSocket ?: break
                     socket.receive(packet)
-                    if (isProbe(packet.data, packet.length, RTP_PROBE)) {
+                    if (AudioProtocol.isRtpProbePayload(packet.data, packet.length)) {
                         rtpDestination = packet.socketAddress
                         DiagnosticsLogger.log("audio", "RTP path probe received", mapOf("remoteEndpoint" to packet.socketAddress.toString()))
                         continue
@@ -667,7 +730,7 @@ class AudioService(
                     val packet = DatagramPacket(buffer, buffer.size)
                     val socket = rtcpSocket ?: break
                     socket.receive(packet)
-                    if (isProbe(packet.data, packet.length, RTCP_PROBE)) {
+                    if (AudioProtocol.isRtcpProbePayload(packet.data, packet.length)) {
                         rtcpDestination = packet.socketAddress
                         DiagnosticsLogger.log("audio", "RTCP path probe received", mapOf("remoteEndpoint" to packet.socketAddress.toString()))
                         continue
@@ -958,6 +1021,32 @@ class AudioService(
         actualSocket.send(DatagramPacket(data, data.size, actualDestination))
     }
 
+    private fun sendProbeDatagram(
+        probeName: String,
+        socket: DatagramSocket?,
+        destination: SocketAddress,
+        data: ByteArray
+    ): Boolean {
+        return try {
+            sendDatagram(socket, destination, data)
+            true
+        } catch (exception: Exception) {
+            udpSendErrors.incrementAndGet()
+            DiagnosticsLogger.log(
+                "audio",
+                "$probeName UDP audio path probe failed",
+                mapOf(
+                    "streamId" to streamId,
+                    "localTransportRole" to localTransportRole.eventName,
+                    "localEndpoint" to socketEndpoint(socket),
+                    "destination" to destination.toString(),
+                    "socketError" to "${exception.javaClass.simpleName}: ${exception.message ?: ""}"
+                )
+            )
+            false
+        }
+    }
+
     private fun setStreaming(message: String) {
         synchronized(stateLock) {
             state = STATE_STREAMING
@@ -973,8 +1062,8 @@ class AudioService(
             }
         } catch (_: Exception) {
         }
-        emitAudioError(code, message, targetStreamId)
         cleanupLocal("failed", emitStopped = true)
+        emitAudioError(code, message, targetStreamId)
     }
 
     private fun cleanupLocal(reason: String, emitStopped: Boolean) {
@@ -996,6 +1085,7 @@ class AudioService(
             localSsrc = 0L
             remoteSsrc = 0L
             receiverProbeRequired = false
+            streamSource = AudioProtocol.SOURCE_MICROPHONE
             latencyMode = AudioLatencyMode.LOW
             qualityMode = AudioProtocol.QUALITY_STANDARD
             streamBitrateBps = AudioProtocol.BITRATE_BPS
@@ -1123,7 +1213,7 @@ class AudioService(
                 "mode" to mode,
                 "state" to nextState,
                 "streamId" to streamId,
-                "source" to AudioProtocol.SOURCE_MICROPHONE,
+                "source" to streamSource,
                 "encoding" to AudioProtocol.CODEC_OPUS,
                 "transport" to AudioProtocol.TRANSPORT_RTP_UDP,
                 "codecImpl" to AudioProtocol.CODEC_IMPL_LIBOPUS,
@@ -1165,12 +1255,12 @@ class AudioService(
         return if (value == 0L) 1L else value
     }
 
-    private fun isProbe(data: ByteArray, length: Int, probe: ByteArray): Boolean {
-        if (length != probe.size) return false
-        for (index in probe.indices) {
-            if (data[index] != probe[index]) return false
+    private fun socketEndpoint(socket: DatagramSocket?): String {
+        return try {
+            socket?.localSocketAddress?.toString() ?: "unknown"
+        } catch (_: Exception) {
+            "closed"
         }
-        return true
     }
 
     private fun MethodChannel.invokeOnMain(method: String, arguments: Any?) {
@@ -1205,7 +1295,5 @@ class AudioService(
         private const val PROBE_INTERVAL_MS = 200L
         private const val MAX_DATAGRAM_BYTES = 4096
         private const val MAX_OPUS_PACKET_BYTES = 1500
-        private val RTP_PROBE = byteArrayOf(0x57, 0x44, 0x41, 0x32, 0x52, 0x54, 0x50)
-        private val RTCP_PROBE = byteArrayOf(0x57, 0x44, 0x41, 0x32, 0x52, 0x54, 0x43, 0x50)
     }
 }

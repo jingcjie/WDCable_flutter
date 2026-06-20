@@ -64,6 +64,9 @@ object AudioProtocol {
         QUALITY_NEAR_LOSSLESS to BITRATE_NEAR_LOSSLESS_BPS
     )
 
+    val RTP_PROBE_PAYLOAD: ByteArray = "WDA2RTP".toByteArray(Charsets.US_ASCII)
+    val RTCP_PROBE_PAYLOAD: ByteArray = "WDA2RTCP".toByteArray(Charsets.US_ASCII)
+
     fun receiveReady(streamId: Long): JSONObject = base(KIND_RECEIVE_READY, streamId)
 
     fun receiveStopped(streamId: Long): JSONObject = base(KIND_RECEIVE_STOPPED, streamId)
@@ -182,30 +185,103 @@ object AudioProtocol {
     }
 
     fun validateOffer(offer: AudioOffer): Boolean {
-        return offer.transport == TRANSPORT_RTP_UDP &&
-            offer.source == SOURCE_MICROPHONE &&
-            offer.codec == CODEC_OPUS &&
-            offer.codecImpl == CODEC_IMPL_LIBOPUS &&
-            offer.sampleRate == SAMPLE_RATE &&
-            offer.channels == CHANNELS &&
-            offer.frameDurationMs == FRAME_DURATION_MS &&
-            isSupportedLatencyMode(offer.latencyMode) &&
-            isSupportedQualityBitratePair(offer.qualityMode, offer.bitrateBps) &&
-            offer.rtpPayloadType == RTP_PAYLOAD_TYPE &&
-            offer.rtpClockRate == RTP_CLOCK_RATE
+        return offerRejectionReason(offer) == null
     }
 
     fun validateAccept(accept: AudioAccept): Boolean {
-        return accept.transport == TRANSPORT_RTP_UDP &&
-            accept.codec == CODEC_OPUS &&
-            accept.codecImpl == CODEC_IMPL_LIBOPUS &&
-            accept.sampleRate == SAMPLE_RATE &&
-            accept.channels == CHANNELS &&
-            accept.frameDurationMs == FRAME_DURATION_MS &&
-            isSupportedLatencyMode(accept.latencyMode) &&
-            isSupportedQualityBitratePair(accept.qualityMode, accept.bitrateBps) &&
-            accept.rtpPayloadType == RTP_PAYLOAD_TYPE &&
-            accept.rtpClockRate == RTP_CLOCK_RATE
+        return acceptRejectionReason(accept) == null
+    }
+
+    fun offerRejectionReason(offer: AudioOffer): String? {
+        if (offer.transport != TRANSPORT_RTP_UDP) {
+            return "transport=${offer.transport}; expected=$TRANSPORT_RTP_UDP"
+        }
+        if (!isSupportedSource(offer.source)) {
+            return "source=${offer.source}; supported=$SOURCE_MICROPHONE,$SOURCE_SYSTEM_AUDIO"
+        }
+        if (offer.codec != CODEC_OPUS) {
+            return "codec=${offer.codec}; expected=$CODEC_OPUS"
+        }
+        if (offer.codecImpl != CODEC_IMPL_LIBOPUS) {
+            return "codecImpl=${offer.codecImpl}; expected=$CODEC_IMPL_LIBOPUS"
+        }
+        if (offer.sampleRate != SAMPLE_RATE) {
+            return "sampleRate=${offer.sampleRate}; expected=$SAMPLE_RATE"
+        }
+        if (offer.channels != CHANNELS) {
+            return "channels=${offer.channels}; expected=$CHANNELS"
+        }
+        if (offer.frameDurationMs != FRAME_DURATION_MS) {
+            return "frameDurationMs=${offer.frameDurationMs}; expected=$FRAME_DURATION_MS"
+        }
+        if (!isSupportedLatencyMode(offer.latencyMode)) {
+            return "latencyMode=${offer.latencyMode}; supported=$LATENCY_LOW,$LATENCY_STABLE"
+        }
+        if (!isSupportedQualityBitratePair(offer.qualityMode, offer.bitrateBps)) {
+            return "qualityMode=${offer.qualityMode},bitrateBps=${offer.bitrateBps}; expected a supported quality/bitrate pair"
+        }
+        if (offer.rtpPayloadType != RTP_PAYLOAD_TYPE) {
+            return "rtpPayloadType=${offer.rtpPayloadType}; expected=$RTP_PAYLOAD_TYPE"
+        }
+        if (offer.rtpClockRate != RTP_CLOCK_RATE) {
+            return "rtpClockRate=${offer.rtpClockRate}; expected=$RTP_CLOCK_RATE"
+        }
+        return null
+    }
+
+    fun acceptRejectionReason(accept: AudioAccept): String? {
+        if (accept.transport != TRANSPORT_RTP_UDP) {
+            return "transport=${accept.transport}; expected=$TRANSPORT_RTP_UDP"
+        }
+        if (accept.codec != CODEC_OPUS) {
+            return "codec=${accept.codec}; expected=$CODEC_OPUS"
+        }
+        if (accept.codecImpl != CODEC_IMPL_LIBOPUS) {
+            return "codecImpl=${accept.codecImpl}; expected=$CODEC_IMPL_LIBOPUS"
+        }
+        if (accept.sampleRate != SAMPLE_RATE) {
+            return "sampleRate=${accept.sampleRate}; expected=$SAMPLE_RATE"
+        }
+        if (accept.channels != CHANNELS) {
+            return "channels=${accept.channels}; expected=$CHANNELS"
+        }
+        if (accept.frameDurationMs != FRAME_DURATION_MS) {
+            return "frameDurationMs=${accept.frameDurationMs}; expected=$FRAME_DURATION_MS"
+        }
+        if (!isSupportedLatencyMode(accept.latencyMode)) {
+            return "latencyMode=${accept.latencyMode}; supported=$LATENCY_LOW,$LATENCY_STABLE"
+        }
+        if (!isSupportedQualityBitratePair(accept.qualityMode, accept.bitrateBps)) {
+            return "qualityMode=${accept.qualityMode},bitrateBps=${accept.bitrateBps}; expected a supported quality/bitrate pair"
+        }
+        if (accept.rtpPayloadType != RTP_PAYLOAD_TYPE) {
+            return "rtpPayloadType=${accept.rtpPayloadType}; expected=$RTP_PAYLOAD_TYPE"
+        }
+        if (accept.rtpClockRate != RTP_CLOCK_RATE) {
+            return "rtpClockRate=${accept.rtpClockRate}; expected=$RTP_CLOCK_RATE"
+        }
+        return null
+    }
+
+    fun isSupportedSource(source: String): Boolean {
+        return source == SOURCE_MICROPHONE || source == SOURCE_SYSTEM_AUDIO
+    }
+
+    fun isRtpProbePayload(data: ByteArray, length: Int): Boolean {
+        return isProbePayload(data, length, RTP_PROBE_PAYLOAD)
+    }
+
+    fun isRtcpProbePayload(data: ByteArray, length: Int): Boolean {
+        return isProbePayload(data, length, RTCP_PROBE_PAYLOAD)
+    }
+
+    fun isSameNegotiation(
+        currentStreamId: Long,
+        currentOfferId: String,
+        incomingStreamId: Long,
+        incomingOfferId: String
+    ): Boolean {
+        return currentStreamId == incomingStreamId && currentOfferId == incomingOfferId
     }
 
     fun isSupportedLatencyMode(value: String): Boolean {
@@ -281,6 +357,14 @@ object AudioProtocol {
         if (qualityMode.isNotBlank()) return qualityMode
         require(bitrateBps == BITRATE_BPS) { "Missing qualityMode" }
         return QUALITY_STANDARD
+    }
+
+    private fun isProbePayload(data: ByteArray, length: Int, probe: ByteArray): Boolean {
+        if (length != probe.size) return false
+        for (index in probe.indices) {
+            if (data[index] != probe[index]) return false
+        }
+        return true
     }
 
     private fun requiredUnsignedInt(metadata: JSONObject, key: String): Long {
