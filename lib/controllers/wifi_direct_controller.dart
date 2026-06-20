@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import '../wifi_direct_service.dart';
 import '../models/wifi_direct_models.dart';
+import '../services/data_manager.dart';
 import '../utils/app_logger.dart';
 
 /// Controller that manages WiFi Direct state and business logic
 class WiFiDirectController {
   static const int _maxLogCount = 200;
+  static const String _audioLatencyModeKey = 'audio.latencyMode';
 
   final WiFiDirectService _service;
   late final StreamController<WiFiDirectState> _stateController;
@@ -583,6 +585,7 @@ class WiFiDirectController {
     _updateState(
       _currentState.copyWith(
         audioMode: event.mode == 'idle' ? _currentState.audioMode : event.mode,
+        audioLatencyMode: event.latencyMode,
         audioState: event.state,
         audioSource: event.source,
         audioEncoding: event.encoding,
@@ -601,12 +604,33 @@ class WiFiDirectController {
       _currentState.copyWith(
         audioState: event.state,
         audioStats: AudioLinkStats(
+          latencyMode: event.latencyMode,
           bitrateBps: event.bitrateBps,
           bufferLevelMs: event.bufferLevelMs,
           framesSent: event.framesSent,
           framesReceived: event.framesReceived,
           droppedFrames: event.droppedFrames,
+          packetLossCount: event.packetLossCount,
+          latePacketDrops: event.latePacketDrops,
+          duplicatePackets: event.duplicatePackets,
+          reorderedPackets: event.reorderedPackets,
           underflowCount: event.underflowCount,
+          plcCount: event.plcCount,
+          rtpPacketsSent: event.rtpPacketsSent,
+          rtpPacketsReceived: event.rtpPacketsReceived,
+          rtpBytesSent: event.rtpBytesSent,
+          rtpBytesReceived: event.rtpBytesReceived,
+          rtcpPacketsSent: event.rtcpPacketsSent,
+          rtcpPacketsReceived: event.rtcpPacketsReceived,
+          rtcpFractionLost: event.rtcpFractionLost,
+          rtcpJitter: event.rtcpJitter,
+          rtcpPacketCount: event.rtcpPacketCount,
+          rtcpOctetCount: event.rtcpOctetCount,
+          roundTripMs: event.roundTripMs,
+          encodeErrorCount: event.encodeErrorCount,
+          decodeErrorCount: event.decodeErrorCount,
+          udpSendErrorCount: event.udpSendErrorCount,
+          udpReceiveErrorCount: event.udpReceiveErrorCount,
           latencyMs: event.latencyMs,
         ),
       ),
@@ -656,6 +680,7 @@ class WiFiDirectController {
 
   Future<void> _initializeState() async {
     try {
+      await loadAudioLatencyMode();
       final isEnabled = await _service.isWifiP2pEnabled();
       _updateState(_currentState.copyWith(isWifiP2pEnabled: isEnabled));
       final discoveryStatus = await _service.getDiscoveryStatus();
@@ -1081,10 +1106,26 @@ class WiFiDirectController {
     }
   }
 
+  Future<void> loadAudioLatencyMode() async {
+    final saved = await DataManager.instance.getString(
+      _audioLatencyModeKey,
+      defaultValue: 'lowLatency',
+    );
+    final mode = saved == 'stable' ? 'stable' : 'lowLatency';
+    _updateState(_currentState.copyWith(audioLatencyMode: mode));
+  }
+
+  Future<void> setAudioLatencyMode(String mode) async {
+    final normalized = mode == 'stable' ? 'stable' : 'lowLatency';
+    _updateState(_currentState.copyWith(audioLatencyMode: normalized));
+    await DataManager.instance.setString(_audioLatencyModeKey, normalized);
+  }
+
   Future<void> startAudio({
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
+    String? latencyMode,
   }) async {
     if (!_currentState.isSessionReady) {
       _addLog('Audio cancelled: WDCable session is not ready');
@@ -1121,6 +1162,7 @@ class WiFiDirectController {
       _updateState(
         _currentState.copyWith(
           audioMode: mode,
+          audioLatencyMode: latencyMode ?? _currentState.audioLatencyMode,
           audioSource: source,
           audioEncoding: encoding,
           audioLastError: null,
@@ -1130,6 +1172,7 @@ class WiFiDirectController {
         mode: mode,
         source: source,
         encoding: encoding,
+        latencyMode: latencyMode ?? _currentState.audioLatencyMode,
       );
       _addLog(result);
     } catch (e) {

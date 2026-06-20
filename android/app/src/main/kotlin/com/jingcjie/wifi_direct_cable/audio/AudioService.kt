@@ -8,24 +8,26 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
-import android.media.MediaCodec
-import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import androidx.core.content.ContextCompat
-import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.jingcjie.wifi_direct_cable.PermissionManager
+import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolConstants
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolFrame
 import com.jingcjie.wifi_direct_cable.session.AudioSessionHandler
 import com.jingcjie.wifi_direct_cable.session.SessionManager
-import com.jingcjie.wifi_direct_cable.session.SessionRole
+import com.jingcjie.wifi_direct_cable.session.SessionTransportRole
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.io.IOException
-import java.nio.ByteBuffer
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetSocketAddress
+import java.net.SocketAddress
+import java.net.SocketTimeoutException
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -34,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToLong
 
 class AudioService(
     private val activity: Activity,
@@ -45,14 +48,29 @@ class AudioService(
     private val controlExecutor = Executors.newSingleThreadExecutor()
     private val statsExecutor = Executors.newSingleThreadScheduledExecutor()
     private val stateLock = Any()
+    private val rtpStatsLock = Any()
     private val running = AtomicBoolean(false)
-    private val audioSequence = AtomicLong(0)
+
     private val bytesSent = AtomicLong(0)
     private val bytesReceived = AtomicLong(0)
     private val framesSent = AtomicLong(0)
     private val framesReceived = AtomicLong(0)
-    private val extraDroppedFrames = AtomicLong(0)
-    private val jitterBuffer = JitterBuffer()
+    private val rtpPacketsSent = AtomicLong(0)
+    private val rtpPacketsReceived = AtomicLong(0)
+    private val rtpBytesSent = AtomicLong(0)
+    private val rtpBytesReceived = AtomicLong(0)
+    private val rtcpPacketsSent = AtomicLong(0)
+    private val rtcpPacketsReceived = AtomicLong(0)
+    private val sequenceGaps = AtomicLong(0)
+    private val udpSendErrors = AtomicLong(0)
+    private val udpReceiveErrors = AtomicLong(0)
+    private val encodeErrors = AtomicLong(0)
+    private val decodeErrors = AtomicLong(0)
+    private val rtcpFractionLost = AtomicLong(0)
+    private val rtcpJitter = AtomicLong(0)
+    private val rtcpRoundTripMs = AtomicLong(-1)
+    private val rtcpRemotePacketCount = AtomicLong(0)
+    private val rtcpRemoteOctetCount = AtomicLong(0)
 
     @Volatile
     private var mode: String = MODE_IDLE
@@ -76,10 +94,37 @@ class AudioService(
     private var accepted: Boolean = false
 
     @Volatile
-    private var transportReady: Boolean = false
+    private var localSsrc: Long = 0L
 
     @Volatile
-    private var listenerStarted: Boolean = false
+    private var remoteSsrc: Long = 0L
+
+    @Volatile
+    private var localTransportRole: SessionTransportRole = SessionTransportRole.CONNECTOR
+
+    @Volatile
+    private var peerAddress: String? = null
+
+    @Volatile
+    private var receiverProbeRequired: Boolean = false
+
+    @Volatile
+    private var latencyMode: AudioLatencyMode = AudioLatencyMode.LOW
+
+    @Volatile
+    private var jitterBuffer: JitterBuffer = JitterBuffer(AudioLatencyMode.LOW)
+
+    @Volatile
+    private var rtpSocket: DatagramSocket? = null
+
+    @Volatile
+    private var rtcpSocket: DatagramSocket? = null
+
+    @Volatile
+    private var rtpDestination: SocketAddress? = null
+
+    @Volatile
+    private var rtcpDestination: SocketAddress? = null
 
     @Volatile
     private var captureThread: Thread? = null
@@ -88,7 +133,30 @@ class AudioService(
     private var playbackThread: Thread? = null
 
     @Volatile
+    private var rtpReceiveThread: Thread? = null
+
+    @Volatile
+    private var rtcpReceiveThread: Thread? = null
+
+    @Volatile
+    private var probeThread: Thread? = null
+
+    @Volatile
     private var statsFuture: ScheduledFuture<*>? = null
+
+    @Volatile
+    private var rtcpFuture: ScheduledFuture<*>? = null
+
+    private var sendSequenceNumber = 0
+    private var sendTimestamp = 0L
+    private var expectedReceiveSequence: Int? = null
+    private var highestSequenceReceived = 0L
+    private var lastTransit: Long? = null
+    private var interarrivalJitter = 0.0
+    private var lastRemoteSenderReportCompact = 0L
+    private var lastRemoteSenderReportReceivedAtMs = 0L
+    private var lastLocalSenderReportCompact = 0L
+    private var lastLocalSenderReportSentAtMs = 0L
 
     init {
         sessionManager.registerAudioHandler(this)
@@ -100,6 +168,7 @@ class AudioService(
         requestedMode: String?,
         source: String?,
         encoding: String?,
+        requestedLatencyMode: String?,
         result: MethodChannel.Result
     ) {
         val normalizedMode = requestedMode ?: MODE_RECEIVE
@@ -122,8 +191,13 @@ class AudioService(
             return
         }
         if (!peerSupportsAudio(info.peerCapabilities)) {
-            result.error(AudioProtocol.ERROR_UNSUPPORTED, "The connected peer does not advertise Audio Link", null)
-            emitAudioError(AudioProtocol.ERROR_UNSUPPORTED, "The connected peer does not support Audio Link", 0L)
+            result.error(AudioProtocol.ERROR_RTP_UNSUPPORTED, "The connected peer does not advertise RTP/libopus Audio Link", null)
+            emitAudioError(AudioProtocol.ERROR_RTP_UNSUPPORTED, "The connected peer does not support RTP/libopus Audio Link", 0L)
+            return
+        }
+        if (!NativeOpus.available) {
+            result.error(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "libopus runtime is not available", null)
+            emitAudioError(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "libopus runtime is not available", 0L)
             return
         }
 
@@ -132,16 +206,14 @@ class AudioService(
                 result.error(AudioProtocol.ERROR_BUSY, "Audio Link is already active", null)
                 return
             }
+            latencyMode = AudioLatencyMode.fromWire(requestedLatencyMode)
+            jitterBuffer = JitterBuffer(latencyMode)
+            localTransportRole = info.transportRole
+            peerAddress = info.peerAddress
         }
 
         if (normalizedMode == MODE_RECEIVE) {
             startReceive(result)
-            return
-        }
-
-        if (!AudioSupport.canSendOpus()) {
-            result.error(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "Sending Opus audio requires Android 10+ with an Opus encoder", null)
-            emitAudioError(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "Opus encoder is not available on this device", 0L)
             return
         }
 
@@ -173,10 +245,7 @@ class AudioService(
                 DiagnosticsLogger.log(
                     "audio",
                     "Audio stop control send failed",
-                    mapOf(
-                        "errorType" to exception.javaClass.simpleName,
-                        "error" to exception.message
-                    )
+                    mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message)
                 )
             } finally {
                 cleanupLocal("stopped", emitStopped = true)
@@ -203,38 +272,15 @@ class AudioService(
             }
             AudioProtocol.KIND_OFFER -> handleOffer(metadata)
             AudioProtocol.KIND_ACCEPT -> handleAccept(metadata)
-            AudioProtocol.KIND_TRANSPORT -> handleTransport(metadata)
-            AudioProtocol.KIND_STOP -> {
-                cleanupLocal(metadata.optString("reason", "peer_stop"), emitStopped = true)
+            AudioProtocol.KIND_TRANSPORT -> {
+                DiagnosticsLogger.log("audio", "Ignoring retired TCP audio.transport for v2", mapOf("streamId" to metadata.optLong("streamId", 0L)))
             }
+            AudioProtocol.KIND_STOP -> cleanupLocal(metadata.optString("reason", "peer_stop"), emitStopped = true)
         }
     }
 
     override fun onAudioFrame(frame: ProtocolFrame) {
-        if (isSender || frame.streamId != streamId || state == STATE_IDLE) {
-            extraDroppedFrames.incrementAndGet()
-            return
-        }
-
-        val metadata = if (frame.metadataJson.isBlank()) JSONObject() else JSONObject(frame.metadataJson)
-        if (metadata.optString("codec") != AudioProtocol.CODEC_OPUS) {
-            extraDroppedFrames.incrementAndGet()
-            return
-        }
-
-        jitterBuffer.add(
-            EncodedAudioFrame(
-                sequenceNumber = frame.sequenceNumber,
-                sentAtMs = metadata.optLong("sentAtMs", System.currentTimeMillis()),
-                durationMs = metadata.optInt("durationMs", AudioProtocol.FRAME_DURATION_MS),
-                payload = frame.payload,
-                codecConfig = metadata.optBoolean("codecConfig", false)
-            )
-        )
-        if (!metadata.optBoolean("codecConfig", false)) {
-            bytesReceived.addAndGet(frame.payload.size.toLong())
-            framesReceived.incrementAndGet()
-        }
+        DiagnosticsLogger.log("audio", "Ignoring retired TCP audio.frame for v2", mapOf("streamId" to frame.streamId))
     }
 
     override fun onAudioFeatureError(code: String, message: String, streamId: Long) {
@@ -243,10 +289,7 @@ class AudioService(
     }
 
     override fun onAudioTransportClosed(reason: String) {
-        if (state != STATE_IDLE) {
-            emitAudioError(AudioProtocol.ERROR_TRANSPORT_FAILED, "Audio transport closed", streamId)
-            cleanupLocal(reason, emitStopped = true)
-        }
+        DiagnosticsLogger.log("audio", "Ignoring retired TCP audio channel close for v2", mapOf("reason" to reason))
     }
 
     override fun onSessionEnded(reason: String) {
@@ -254,12 +297,6 @@ class AudioService(
     }
 
     private fun startReceive(result: MethodChannel.Result) {
-        if (!AudioSupport.canReceiveOpus()) {
-            result.error(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "Opus playback is not available on this device", null)
-            emitAudioError(AudioProtocol.ERROR_CODEC_UNAVAILABLE, "Opus playback is not available on this device", 0L)
-            return
-        }
-
         synchronized(stateLock) {
             mode = MODE_RECEIVE
             state = STATE_RECEIVE_READY
@@ -267,8 +304,9 @@ class AudioService(
             offerId = ""
             isSender = false
             accepted = false
-            transportReady = false
-            listenerStarted = false
+            localSsrc = randomSsrc()
+            remoteSsrc = 0L
+            receiverProbeRequired = false
         }
         resetStats()
         controlExecutor.execute {
@@ -288,8 +326,14 @@ class AudioService(
     }
 
     private fun startSend(result: MethodChannel.Result) {
+        val info = sessionManager.getAudioSessionInfo()
+        if (info == null) {
+            result.error("SESSION_NOT_READY", "The WDCable session is not ready", null)
+            return
+        }
         val newStreamId = nextStreamId()
         val newOfferId = UUID.randomUUID().toString()
+        val ssrc = randomSsrc()
         synchronized(stateLock) {
             mode = MODE_SEND
             state = STATE_OFFER_SENT
@@ -297,13 +341,18 @@ class AudioService(
             offerId = newOfferId
             isSender = true
             accepted = false
-            transportReady = false
-            listenerStarted = false
+            localSsrc = ssrc
+            remoteSsrc = 0L
+            localTransportRole = info.transportRole
+            peerAddress = info.peerAddress
+            receiverProbeRequired = false
         }
         resetStats()
         controlExecutor.execute {
             try {
-                sessionManager.sendAudioControl(AudioProtocol.offer(newStreamId, newOfferId))
+                sessionManager.sendAudioControl(
+                    AudioProtocol.offer(newStreamId, newOfferId, ssrc, info.transportRole)
+                )
                 emitAudioState(STATE_OFFER_SENT, "Audio offer sent")
                 result.successOnMain("Audio send offer sent")
             } catch (exception: Exception) {
@@ -321,34 +370,43 @@ class AudioService(
         val offer = try {
             AudioProtocol.parseOffer(metadata)
         } catch (exception: IllegalArgumentException) {
-            sessionManager.sendAudioError(0L, AudioProtocol.ERROR_UNSUPPORTED, exception.message ?: "Invalid audio offer")
+            sessionManager.sendAudioError(0L, AudioProtocol.ERROR_RTP_UNSUPPORTED, exception.message ?: "Invalid audio offer")
             return
         }
-
+        val info = sessionManager.getAudioSessionInfo()
+        if (info == null) {
+            sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_TRANSPORT_FAILED, "The WDCable session is not ready")
+            return
+        }
         if (state != STATE_RECEIVE_READY || mode != MODE_RECEIVE) {
             sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_RECEIVER_NOT_READY, "Receiver has not started Audio Link receive mode")
             return
         }
-        if (offer.source != AudioProtocol.SOURCE_MICROPHONE ||
-            offer.codec != AudioProtocol.CODEC_OPUS ||
-            offer.sampleRate != AudioProtocol.SAMPLE_RATE ||
-            offer.channels != AudioProtocol.CHANNELS
-        ) {
-            sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_UNSUPPORTED, "Unsupported audio offer")
+        if (!AudioProtocol.validateOffer(offer)) {
+            sessionManager.sendAudioError(offer.streamId, AudioProtocol.ERROR_RTP_UNSUPPORTED, "Unsupported RTP/libopus audio offer")
             return
         }
 
+        val ssrc = randomSsrc()
+        val probeRequired = AudioProtocol.receiverProbeRequired(info.transportRole)
         synchronized(stateLock) {
             streamId = offer.streamId
             offerId = offer.offerId
             isSender = false
             accepted = true
             state = STATE_CONNECTING
+            localSsrc = ssrc
+            remoteSsrc = offer.rtpSsrc
+            localTransportRole = info.transportRole
+            peerAddress = info.peerAddress
+            receiverProbeRequired = probeRequired
         }
         try {
-            sessionManager.sendAudioControl(AudioProtocol.accept(offer.streamId, offer.offerId))
+            sessionManager.sendAudioControl(
+                AudioProtocol.accept(offer.streamId, offer.offerId, ssrc, info.transportRole, probeRequired)
+            )
             emitAudioState(STATE_CONNECTING, "Audio offer accepted")
-            openListenerIfGroupOwner()
+            startUdpTransport()
         } catch (exception: Exception) {
             failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, "Failed to accept audio offer: ${exception.message}", offer.streamId)
         }
@@ -358,92 +416,265 @@ class AudioService(
         val accept = try {
             AudioProtocol.parseAccept(metadata)
         } catch (exception: IllegalArgumentException) {
-            failAudio(AudioProtocol.ERROR_UNSUPPORTED, exception.message ?: "Invalid audio accept", streamId)
+            failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, exception.message ?: "Invalid audio accept", streamId)
             return
         }
+        val info = sessionManager.getAudioSessionInfo() ?: return
 
         if (!isSender || accept.streamId != streamId || accept.offerId != offerId) {
             return
         }
-        if (accept.codec != AudioProtocol.CODEC_OPUS) {
-            failAudio(AudioProtocol.ERROR_UNSUPPORTED, "Peer accepted an unsupported codec", accept.streamId)
+        if (!AudioProtocol.validateAccept(accept)) {
+            failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted an unsupported RTP/libopus format", accept.streamId)
             return
         }
 
         synchronized(stateLock) {
             accepted = true
             state = STATE_CONNECTING
+            remoteSsrc = accept.rtpSsrc
+            localTransportRole = info.transportRole
+            peerAddress = info.peerAddress
+            receiverProbeRequired = accept.receiverProbeRequired
         }
         emitAudioState(STATE_CONNECTING, "Audio offer accepted by peer")
-        openListenerIfGroupOwner()
+        startUdpTransport()
     }
 
-    private fun handleTransport(metadata: JSONObject) {
-        val transport = try {
-            AudioProtocol.parseTransport(metadata)
-        } catch (exception: IllegalArgumentException) {
-            failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, exception.message ?: "Invalid audio transport", streamId)
-            return
-        }
-
-        if (transport.streamId != streamId || transport.transport != AudioProtocol.TRANSPORT_TCP || transport.port <= 0) {
-            failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, "Invalid audio transport details", streamId)
-            return
-        }
-
-        val info = sessionManager.getAudioSessionInfo()
-        if (info?.role != SessionRole.CLIENT) {
-            return
-        }
-
-        emitAudioState(STATE_CONNECTING, "Connecting audio channel")
-        sessionManager.connectAudioTransport(
-            streamId = streamId,
-            port = transport.port,
-            onConnected = { onAudioTransportReady() },
-            onError = { exception ->
-                failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, "Failed to connect audio channel: ${exception.message}", streamId)
-            }
-        )
-    }
-
-    private fun openListenerIfGroupOwner() {
-        val info = sessionManager.getAudioSessionInfo() ?: return
-        if (info.role != SessionRole.GROUP_OWNER || listenerStarted || !accepted) {
-            return
-        }
-
-        listenerStarted = true
-        sessionManager.startAudioListener(
-            streamId = streamId,
-            onPort = { port ->
-                try {
-                    sessionManager.sendAudioControl(AudioProtocol.transport(streamId, port))
-                    emitAudioState(STATE_CONNECTING, "Audio channel listening on port $port")
-                } catch (exception: Exception) {
-                    failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, "Failed to send audio transport details: ${exception.message}", streamId)
+    private fun startUdpTransport() {
+        if (!accepted || running.get()) return
+        try {
+            closeUdpSockets()
+            val localRole = localTransportRole
+            val newRtpSocket: DatagramSocket
+            val newRtcpSocket: DatagramSocket
+            if (localRole == SessionTransportRole.LISTENER) {
+                newRtpSocket = bindUdpSocket(AudioProtocol.RTP_PORT)
+                newRtcpSocket = bindUdpSocket(AudioProtocol.RTCP_PORT)
+            } else {
+                newRtpSocket = DatagramSocket()
+                newRtcpSocket = DatagramSocket()
+                val host = peerAddress
+                if (!host.isNullOrBlank()) {
+                    rtpDestination = InetSocketAddress(host, AudioProtocol.RTP_PORT)
+                    rtcpDestination = InetSocketAddress(host, AudioProtocol.RTCP_PORT)
                 }
-            },
-            onConnected = { onAudioTransportReady() },
-            onError = { exception ->
-                failAudio(AudioProtocol.ERROR_TRANSPORT_FAILED, "Audio listener failed: ${exception.message}", streamId)
             }
-        )
+            newRtpSocket.soTimeout = SOCKET_POLL_TIMEOUT_MS
+            newRtcpSocket.soTimeout = SOCKET_POLL_TIMEOUT_MS
+            rtpSocket = newRtpSocket
+            rtcpSocket = newRtcpSocket
+            running.set(true)
+
+            DiagnosticsLogger.log(
+                "audio",
+                "Audio RTP/RTCP sockets opened",
+                mapOf(
+                    "streamId" to streamId,
+                    "localTransportRole" to localRole.eventName,
+                    "audioPortOwnerRole" to SessionTransportRole.LISTENER.eventName,
+                    "rtpBindEndpoint" to newRtpSocket.localSocketAddress.toString(),
+                    "rtcpBindEndpoint" to newRtcpSocket.localSocketAddress.toString(),
+                    "receiverProbeRequired" to receiverProbeRequired,
+                    "latencyMode" to latencyMode.wireValue
+                )
+            )
+
+            startRtpReceiveLoop()
+            startRtcpReceiveLoop()
+            startStats()
+            startRtcpReports()
+
+            if (isSender) {
+                if (AudioProtocol.senderWaitsForReceiverProbe(localRole, receiverProbeRequired)) {
+                    waitForReceiverProbeThenStartCapture()
+                } else {
+                    startCapture()
+                    setStreaming("Audio Link streaming")
+                }
+            } else {
+                if (localRole == SessionTransportRole.CONNECTOR) {
+                    startProbeLoop()
+                }
+                startPlayback()
+                setStreaming("Audio Link streaming")
+            }
+        } catch (exception: Exception) {
+            failAudio(
+                if (exception is java.net.BindException) AudioProtocol.ERROR_RTP_BIND_FAILED else AudioProtocol.ERROR_TRANSPORT_FAILED,
+                "Failed to open RTP/RTCP sockets: ${exception.message}",
+                streamId
+            )
+        }
     }
 
-    private fun onAudioTransportReady() {
-        synchronized(stateLock) {
-            transportReady = true
-            state = STATE_STREAMING
+    private fun bindUdpSocket(port: Int): DatagramSocket {
+        return DatagramSocket(null).also { socket ->
+            socket.reuseAddress = true
+            socket.bind(InetSocketAddress(port))
         }
-        running.set(true)
-        startStats()
-        if (isSender) {
+    }
+
+    private fun waitForReceiverProbeThenStartCapture() {
+        Thread({
+            val deadline = System.currentTimeMillis() + PROBE_TIMEOUT_MS
+            while (running.get() && (rtpDestination == null || rtcpDestination == null) && System.currentTimeMillis() < deadline) {
+                Thread.sleep(20)
+            }
+            if (!running.get()) return@Thread
+            if (rtpDestination == null || rtcpDestination == null) {
+                failAudio(AudioProtocol.ERROR_RTP_PROBE_TIMEOUT, "Timed out waiting for receiver UDP path probe", streamId)
+                return@Thread
+            }
             startCapture()
-        } else {
-            startPlayback()
+            setStreaming("Audio Link streaming")
+        }, "WDCableAudioProbeWait").also { it.start() }
+    }
+
+    private fun startProbeLoop() {
+        if (probeThread?.isAlive == true) return
+        probeThread = Thread({
+            val host = peerAddress ?: return@Thread
+            val rtpProbeTarget = InetSocketAddress(host, AudioProtocol.RTP_PORT)
+            val rtcpProbeTarget = InetSocketAddress(host, AudioProtocol.RTCP_PORT)
+            while (running.get() && rtpPacketsReceived.get() == 0L) {
+                try {
+                    sendDatagram(rtpSocket, rtpProbeTarget, RTP_PROBE)
+                    sendDatagram(rtcpSocket, rtcpProbeTarget, RTCP_PROBE)
+                    DiagnosticsLogger.log("audio", "UDP audio path probe sent", mapOf("rtpTarget" to rtpProbeTarget.toString(), "rtcpTarget" to rtcpProbeTarget.toString()))
+                } catch (exception: Exception) {
+                    udpSendErrors.incrementAndGet()
+                    DiagnosticsLogger.log("audio", "UDP audio path probe failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
+                }
+                Thread.sleep(PROBE_INTERVAL_MS)
+            }
+        }, "WDCableAudioProbe").also { it.start() }
+    }
+
+    private fun startRtpReceiveLoop() {
+        if (rtpReceiveThread?.isAlive == true) return
+        rtpReceiveThread = Thread({
+            val buffer = ByteArray(MAX_DATAGRAM_BYTES)
+            while (running.get()) {
+                try {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    val socket = rtpSocket ?: break
+                    socket.receive(packet)
+                    if (isProbe(packet.data, packet.length, RTP_PROBE)) {
+                        rtpDestination = packet.socketAddress
+                        DiagnosticsLogger.log("audio", "RTP path probe received", mapOf("remoteEndpoint" to packet.socketAddress.toString()))
+                        continue
+                    }
+                    val bytes = packet.data.copyOf(packet.length)
+                    val rtp = RtpCodec.decode(bytes)
+                    if (rtp.payloadType != AudioProtocol.RTP_PAYLOAD_TYPE || (remoteSsrc != 0L && rtp.ssrc != remoteSsrc)) {
+                        continue
+                    }
+                    rtpPacketsReceived.incrementAndGet()
+                    rtpBytesReceived.addAndGet(packet.length.toLong())
+                    bytesReceived.addAndGet(rtp.payload.size.toLong())
+                    framesReceived.incrementAndGet()
+                    updateRtpReceiveStats(rtp)
+                    if (!isSender) {
+                        jitterBuffer.add(
+                            RtpAudioFrame(
+                                sequenceNumber = rtp.sequenceNumber,
+                                timestamp = rtp.timestamp,
+                                receivedAtMs = System.currentTimeMillis(),
+                                payload = rtp.payload
+                            )
+                        )
+                    }
+                    if (rtpDestination == null) {
+                        rtpDestination = packet.socketAddress
+                    }
+                } catch (_: SocketTimeoutException) {
+                } catch (exception: Exception) {
+                    if (running.get()) {
+                        udpReceiveErrors.incrementAndGet()
+                        DiagnosticsLogger.log("audio", "RTP receive failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
+                    }
+                }
+            }
+        }, "WDCableAudioRtpReceive").also { it.start() }
+    }
+
+    private fun startRtcpReceiveLoop() {
+        if (rtcpReceiveThread?.isAlive == true) return
+        rtcpReceiveThread = Thread({
+            val buffer = ByteArray(MAX_DATAGRAM_BYTES)
+            while (running.get()) {
+                try {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    val socket = rtcpSocket ?: break
+                    socket.receive(packet)
+                    if (isProbe(packet.data, packet.length, RTCP_PROBE)) {
+                        rtcpDestination = packet.socketAddress
+                        DiagnosticsLogger.log("audio", "RTCP path probe received", mapOf("remoteEndpoint" to packet.socketAddress.toString()))
+                        continue
+                    }
+                    rtcpDestination = packet.socketAddress
+                    rtcpPacketsReceived.incrementAndGet()
+                    handleRtcpPacket(packet.data.copyOf(packet.length))
+                } catch (_: SocketTimeoutException) {
+                } catch (exception: Exception) {
+                    if (running.get()) {
+                        udpReceiveErrors.incrementAndGet()
+                        DiagnosticsLogger.log("audio", "RTCP receive failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
+                    }
+                }
+            }
+        }, "WDCableAudioRtcpReceive").also { it.start() }
+    }
+
+    private fun updateRtpReceiveStats(packet: RtpPacket) {
+        synchronized(rtpStatsLock) {
+            val expected = expectedReceiveSequence
+            if (expected != null) {
+                val distance = RtpCodec.sequenceDistance(expected, packet.sequenceNumber)
+                if (distance in 1..0x7fff) {
+                    sequenceGaps.addAndGet(distance.toLong())
+                }
+            }
+            expectedReceiveSequence = RtpCodec.nextSequence(packet.sequenceNumber)
+            highestSequenceReceived = packet.sequenceNumber.toLong()
+            val arrivalTimestamp = System.currentTimeMillis() * (AudioProtocol.RTP_CLOCK_RATE / 1000L)
+            val transit = arrivalTimestamp - packet.timestamp
+            val previousTransit = lastTransit
+            if (previousTransit != null) {
+                val delta = abs(transit - previousTransit)
+                interarrivalJitter += (delta - interarrivalJitter) / 16.0
+                rtcpJitter.set(interarrivalJitter.roundToLong())
+            }
+            lastTransit = transit
         }
-        emitAudioState(STATE_STREAMING, "Audio Link streaming")
+    }
+
+    private fun handleRtcpPacket(datagram: ByteArray) {
+        try {
+            when (val packet = RtcpCodec.decode(datagram)) {
+                is RtcpPacket.SenderReport -> {
+                    lastRemoteSenderReportCompact = packet.report.compactNtp
+                    lastRemoteSenderReportReceivedAtMs = System.currentTimeMillis()
+                    rtcpRemotePacketCount.set(packet.report.packetCount)
+                    rtcpRemoteOctetCount.set(packet.report.octetCount)
+                }
+                is RtcpPacket.ReceiverReport -> {
+                    rtcpFractionLost.set(packet.report.fractionLost.toLong())
+                    rtcpJitter.set(packet.report.interarrivalJitter)
+                    if (packet.report.lastSenderReport != 0L &&
+                        packet.report.lastSenderReport == lastLocalSenderReportCompact &&
+                        lastLocalSenderReportSentAtMs != 0L
+                    ) {
+                        val elapsed = System.currentTimeMillis() - lastLocalSenderReportSentAtMs
+                        val rtt = elapsed - RtcpCodec.dlsrToMillis(packet.report.delaySinceLastSenderReport)
+                        rtcpRoundTripMs.set(rtt.coerceAtLeast(0L))
+                    }
+                }
+            }
+        } catch (exception: Exception) {
+            DiagnosticsLogger.log("audio", "RTCP parse failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
+        }
     }
 
     private fun startCapture() {
@@ -460,18 +691,14 @@ class AudioService(
     private fun captureLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
         var recorder: AudioRecord? = null
-        var encoder: MediaCodec? = null
+        var encoderHandle = 0L
         try {
-            val pcmFrameBytes = AudioProtocol.SAMPLE_RATE *
-                AudioProtocol.CHANNELS *
-                BYTES_PER_SAMPLE *
-                AudioProtocol.FRAME_DURATION_MS / 1000
             val minBufferSize = AudioRecord.getMinBufferSize(
                 AudioProtocol.SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             )
-            val recordBufferSize = max(minBufferSize, pcmFrameBytes * 4)
+            val recordBufferSize = max(minBufferSize, AudioProtocol.PCM_FRAME_BYTES * 4)
             recorder = AudioRecord.Builder()
                 .setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(
@@ -484,32 +711,39 @@ class AudioService(
                 .setBufferSizeInBytes(recordBufferSize)
                 .build()
 
-            val format = MediaFormat.createAudioFormat(
-                MediaFormat.MIMETYPE_AUDIO_OPUS,
-                AudioProtocol.SAMPLE_RATE,
-                AudioProtocol.CHANNELS
-            )
-            format.setInteger(MediaFormat.KEY_BIT_RATE, AudioProtocol.BITRATE_BPS)
-            format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, pcmFrameBytes)
-            encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_OPUS)
-            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            encoder.start()
+            encoderHandle = NativeOpus.createEncoder(AudioProtocol.SAMPLE_RATE, AudioProtocol.CHANNELS, AudioProtocol.BITRATE_BPS)
+            check(encoderHandle != 0L) { "Could not create libopus encoder" }
             recorder.startRecording()
 
-            val pcm = ByteArray(pcmFrameBytes)
-            var presentationTimeUs = 0L
+            val pcm = ByteArray(AudioProtocol.PCM_FRAME_BYTES)
+            val encoded = ByteArray(MAX_OPUS_PACKET_BYTES)
             while (running.get()) {
-                val read = recorder.read(pcm, 0, pcm.size)
+                val read = recorder.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
                 if (read <= 0) continue
-                val inputIndex = encoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
-                if (inputIndex >= 0) {
-                    val inputBuffer = encoder.getInputBuffer(inputIndex)
-                    inputBuffer?.clear()
-                    inputBuffer?.put(pcm, 0, read)
-                    encoder.queueInputBuffer(inputIndex, 0, read, presentationTimeUs, 0)
-                    presentationTimeUs += AudioProtocol.FRAME_DURATION_MS * 1000L
+                if (read < pcm.size) {
+                    pcm.fill(0, read, pcm.size)
                 }
-                drainEncoder(encoder)
+                val encodedBytes = NativeOpus.encode(encoderHandle, pcm, AudioProtocol.SAMPLES_PER_PACKET, encoded)
+                if (encodedBytes <= 0) {
+                    encodeErrors.incrementAndGet()
+                    continue
+                }
+                val payload = encoded.copyOf(encodedBytes)
+                val packet = RtpPacket(
+                    payloadType = AudioProtocol.RTP_PAYLOAD_TYPE,
+                    sequenceNumber = sendSequenceNumber,
+                    timestamp = sendTimestamp,
+                    ssrc = localSsrc,
+                    payload = payload
+                )
+                val datagram = RtpCodec.encode(packet)
+                sendDatagram(rtpSocket, rtpDestination, datagram)
+                bytesSent.addAndGet(payload.size.toLong())
+                framesSent.incrementAndGet()
+                rtpPacketsSent.incrementAndGet()
+                rtpBytesSent.addAndGet(datagram.size.toLong())
+                sendSequenceNumber = RtpCodec.nextSequence(sendSequenceNumber)
+                sendTimestamp = RtpCodec.nextTimestamp(sendTimestamp)
             }
         } catch (exception: Exception) {
             if (running.get()) {
@@ -524,80 +758,15 @@ class AudioService(
                 recorder?.release()
             } catch (_: Exception) {
             }
-            try {
-                encoder?.stop()
-            } catch (_: Exception) {
-            }
-            try {
-                encoder?.release()
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun drainEncoder(encoder: MediaCodec) {
-        val bufferInfo = MediaCodec.BufferInfo()
-        while (true) {
-            val outputIndex = encoder.dequeueOutputBuffer(bufferInfo, 0)
-            if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                sendCodecSpecificData(encoder.outputFormat)
-                continue
-            }
-            if (outputIndex < 0) return
-            try {
-                if (bufferInfo.size > 0) {
-                    val outputBuffer = encoder.getOutputBuffer(outputIndex) ?: return
-                    val packet = ByteArray(bufferInfo.size)
-                    outputBuffer.position(bufferInfo.offset)
-                    outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                    outputBuffer.get(packet)
-                    val codecConfig =
-                        (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
-                    val sentAtMs = System.currentTimeMillis()
-                    sessionManager.writeAudioFrame(
-                        streamId = streamId,
-                        sequenceNumber = audioSequence.incrementAndGet(),
-                        metadata = AudioProtocol.frameMetadata(sentAtMs, codecConfig),
-                        payload = packet
-                    )
-                    if (!codecConfig) {
-                        bytesSent.addAndGet(packet.size.toLong())
-                        framesSent.incrementAndGet()
-                    }
-                }
-            } finally {
-                encoder.releaseOutputBuffer(outputIndex, false)
-            }
-        }
-    }
-
-    private fun sendCodecSpecificData(format: MediaFormat) {
-        for (index in 0..2) {
-            val key = "csd-$index"
-            if (!format.containsKey(key)) continue
-            val buffer = format.getByteBuffer(key) ?: continue
-            val duplicate = buffer.duplicate()
-            duplicate.position(0)
-            val packet = ByteArray(duplicate.remaining())
-            duplicate.get(packet)
-            sessionManager.writeAudioFrame(
-                streamId = streamId,
-                sequenceNumber = audioSequence.incrementAndGet(),
-                metadata = AudioProtocol.frameMetadata(System.currentTimeMillis(), codecConfig = true),
-                payload = packet
-            )
+            NativeOpus.destroyEncoder(encoderHandle)
         }
     }
 
     private fun playbackLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-        var decoder: MediaCodec? = null
+        var decoderHandle = 0L
         var audioTrack: AudioTrack? = null
         try {
-            val pcmFrameBytes = AudioProtocol.SAMPLE_RATE *
-                AudioProtocol.CHANNELS *
-                BYTES_PER_SAMPLE *
-                AudioProtocol.FRAME_DURATION_MS / 1000
             val minTrackBuffer = AudioTrack.getMinBufferSize(
                 AudioProtocol.SAMPLE_RATE,
                 AudioFormat.CHANNEL_OUT_MONO,
@@ -617,52 +786,37 @@ class AudioService(
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build()
                 )
-                .setBufferSizeInBytes(max(minTrackBuffer, pcmFrameBytes * 10))
+                .setBufferSizeInBytes(max(minTrackBuffer, AudioProtocol.PCM_FRAME_BYTES * 4))
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
-
+            decoderHandle = NativeOpus.createDecoder(AudioProtocol.SAMPLE_RATE, AudioProtocol.CHANNELS)
+            check(decoderHandle != 0L) { "Could not create libopus decoder" }
             audioTrack.play()
 
-            var presentationTimeUs = 0L
-            val codecSpecificData = mutableListOf<ByteArray>()
+            val pcm = ByteArray(AudioProtocol.PCM_FRAME_BYTES)
+            val silence = ByteArray(AudioProtocol.PCM_FRAME_BYTES)
             while (running.get()) {
-                val encodedFrame = jitterBuffer.pollReady()
-                if (encodedFrame == null) {
-                    Thread.sleep(5)
-                    decoder?.let { drainDecoder(it, audioTrack) }
-                    continue
-                }
-                if (encodedFrame.codecConfig && decoder == null) {
-                    codecSpecificData.add(encodedFrame.payload)
-                    continue
-                }
-                if (decoder == null) {
-                    decoder = createOpusDecoder(codecSpecificData)
-                }
-                val inputIndex = decoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
-                if (inputIndex >= 0) {
-                    val inputBuffer = decoder.getInputBuffer(inputIndex)
-                    inputBuffer?.clear()
-                    inputBuffer?.put(encodedFrame.payload)
-                    val flags = if (encodedFrame.codecConfig) {
-                        MediaCodec.BUFFER_FLAG_CODEC_CONFIG
-                    } else {
-                        0
+                when (val next = jitterBuffer.pollForPlayback()) {
+                    is JitterBufferPoll.Packet -> {
+                        val decodedSamples = NativeOpus.decode(decoderHandle, next.frame.payload, AudioProtocol.SAMPLES_PER_PACKET, pcm)
+                        if (decodedSamples > 0) {
+                            audioTrack.write(pcm, 0, decodedSamples * AudioProtocol.CHANNELS * AudioProtocol.BYTES_PER_SAMPLE)
+                        } else {
+                            decodeErrors.incrementAndGet()
+                            audioTrack.write(silence, 0, silence.size)
+                        }
                     }
-                    decoder.queueInputBuffer(
-                        inputIndex,
-                        0,
-                        encodedFrame.payload.size,
-                        presentationTimeUs,
-                        flags
-                    )
-                    if (!encodedFrame.codecConfig) {
-                        presentationTimeUs += encodedFrame.durationMs * 1000L
+                    JitterBufferPoll.Missing -> {
+                        val decodedSamples = NativeOpus.decode(decoderHandle, null, AudioProtocol.SAMPLES_PER_PACKET, pcm)
+                        if (decodedSamples > 0) {
+                            audioTrack.write(pcm, 0, decodedSamples * AudioProtocol.CHANNELS * AudioProtocol.BYTES_PER_SAMPLE)
+                        } else {
+                            decodeErrors.incrementAndGet()
+                            audioTrack.write(silence, 0, silence.size)
+                        }
                     }
-                } else {
-                    extraDroppedFrames.incrementAndGet()
+                    JitterBufferPoll.Wait -> Thread.sleep(5)
                 }
-                drainDecoder(decoder, audioTrack)
             }
         } catch (exception: Exception) {
             if (running.get()) {
@@ -677,52 +831,77 @@ class AudioService(
                 audioTrack?.release()
             } catch (_: Exception) {
             }
-            try {
-                decoder?.stop()
-            } catch (_: Exception) {
-            }
-            try {
-                decoder?.release()
-            } catch (_: Exception) {
-            }
+            NativeOpus.destroyDecoder(decoderHandle)
         }
     }
 
-    private fun createOpusDecoder(codecSpecificData: List<ByteArray>): MediaCodec {
-        val format = MediaFormat.createAudioFormat(
-            MediaFormat.MIMETYPE_AUDIO_OPUS,
-            AudioProtocol.SAMPLE_RATE,
-            AudioProtocol.CHANNELS
-        )
-        codecSpecificData.forEachIndexed { index, data ->
-            if (data.isNotEmpty()) {
-                format.setByteBuffer("csd-$index", ByteBuffer.wrap(data))
+    private fun startRtcpReports() {
+        stopRtcpReports()
+        rtcpFuture = statsExecutor.scheduleAtFixedRate({
+            try {
+                sendRtcpReport()
+            } catch (exception: Exception) {
+                DiagnosticsLogger.log("audio", "RTCP report send failed", mapOf("errorType" to exception.javaClass.simpleName, "error" to exception.message))
             }
-        }
-        return MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_AUDIO_OPUS).also { decoder ->
-            decoder.configure(format, null, null, 0)
-            decoder.start()
-        }
+        }, 1, 1, TimeUnit.SECONDS)
     }
 
-    private fun drainDecoder(decoder: MediaCodec, audioTrack: AudioTrack) {
-        val bufferInfo = MediaCodec.BufferInfo()
-        while (true) {
-            val outputIndex = decoder.dequeueOutputBuffer(bufferInfo, 0)
-            if (outputIndex < 0) return
-            try {
-                if (bufferInfo.size > 0) {
-                    val outputBuffer = decoder.getOutputBuffer(outputIndex) ?: return
-                    val pcm = ByteArray(bufferInfo.size)
-                    outputBuffer.position(bufferInfo.offset)
-                    outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                    outputBuffer.get(pcm)
-                    audioTrack.write(pcm, 0, pcm.size)
-                }
-            } finally {
-                decoder.releaseOutputBuffer(outputIndex, false)
-            }
+    private fun stopRtcpReports() {
+        rtcpFuture?.cancel(true)
+        rtcpFuture = null
+    }
+
+    private fun sendRtcpReport() {
+        val destination = rtcpDestination ?: return
+        val socket = rtcpSocket ?: return
+        if (isSender) {
+            val now = System.currentTimeMillis()
+            val report = RtcpCodec.encodeSenderReport(
+                senderSsrc = localSsrc,
+                rtpTimestamp = sendTimestamp,
+                packetCount = rtpPacketsSent.get(),
+                octetCount = bytesSent.get(),
+                nowMs = now
+            )
+            val parsed = RtcpCodec.decode(report) as RtcpPacket.SenderReport
+            lastLocalSenderReportCompact = parsed.report.compactNtp
+            lastLocalSenderReportSentAtMs = now
+            sendDatagram(socket, destination, report)
+        } else {
+            val totalExpected = rtpPacketsReceived.get() + sequenceGaps.get()
+            val fractionLost = if (totalExpected <= 0L) 0 else ((sequenceGaps.get() * 256L) / totalExpected).coerceIn(0L, 255L).toInt()
+            val report = RtcpCodec.encodeReceiverReport(
+                RtcpReceiverReport(
+                    receiverSsrc = localSsrc,
+                    senderSsrc = remoteSsrc,
+                    fractionLost = fractionLost,
+                    cumulativePacketsLost = sequenceGaps.get().coerceAtMost(0x7fffffL).toInt(),
+                    highestSequenceReceived = highestSequenceReceived,
+                    interarrivalJitter = rtcpJitter.get(),
+                    lastSenderReport = lastRemoteSenderReportCompact,
+                    delaySinceLastSenderReport = if (lastRemoteSenderReportCompact == 0L) {
+                        0
+                    } else {
+                        RtcpCodec.delaySinceLastSenderReport(lastRemoteSenderReportReceivedAtMs)
+                    }
+                )
+            )
+            sendDatagram(socket, destination, report)
         }
+        rtcpPacketsSent.incrementAndGet()
+    }
+
+    private fun sendDatagram(socket: DatagramSocket?, destination: SocketAddress?, data: ByteArray) {
+        val actualSocket = socket ?: throw IOException("UDP socket is not open")
+        val actualDestination = destination ?: throw IOException("UDP destination is not known")
+        actualSocket.send(DatagramPacket(data, data.size, actualDestination))
+    }
+
+    private fun setStreaming(message: String) {
+        synchronized(stateLock) {
+            state = STATE_STREAMING
+        }
+        emitAudioState(STATE_STREAMING, message)
     }
 
     private fun failAudio(code: String, message: String, targetStreamId: Long) {
@@ -741,6 +920,8 @@ class AudioService(
         val previousState = state
         running.set(false)
         stopStats()
+        stopRtcpReports()
+        closeUdpSockets()
         jitterBuffer.clear()
         sessionManager.closeAudioTransport()
         synchronized(stateLock) {
@@ -750,13 +931,37 @@ class AudioService(
             offerId = ""
             isSender = false
             accepted = false
-            transportReady = false
-            listenerStarted = false
             peerReady = false
+            localSsrc = 0L
+            remoteSsrc = 0L
+            receiverProbeRequired = false
+            rtpDestination = null
+            rtcpDestination = null
+            expectedReceiveSequence = null
+            highestSequenceReceived = 0L
+            lastTransit = null
+            interarrivalJitter = 0.0
+            lastRemoteSenderReportCompact = 0L
+            lastRemoteSenderReportReceivedAtMs = 0L
+            lastLocalSenderReportCompact = 0L
+            lastLocalSenderReportSentAtMs = 0L
         }
         if (emitStopped && previousState != STATE_IDLE) {
             emitAudioState(STATE_IDLE, reason)
         }
+    }
+
+    private fun closeUdpSockets() {
+        try {
+            rtpSocket?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            rtcpSocket?.close()
+        } catch (_: Exception) {
+        }
+        rtpSocket = null
+        rtcpSocket = null
     }
 
     private fun startStats() {
@@ -767,20 +972,40 @@ class AudioService(
             val bitrateBps = (totalBytes - lastBytes).coerceAtLeast(0L) * 8L
             lastBytes = totalBytes
             val snapshot = jitterBuffer.snapshot()
-            val dropped = snapshot.droppedFrames + extraDroppedFrames.get()
             methodChannel.invokeOnMain(
                 "onAudioStats",
                 mapOf(
                     "mode" to mode,
                     "state" to state,
                     "streamId" to streamId,
+                    "latencyMode" to latencyMode.wireValue,
                     "bitrateBps" to bitrateBps,
                     "bufferLevelMs" to snapshot.bufferLevelMs,
                     "framesSent" to framesSent.get(),
                     "framesReceived" to framesReceived.get(),
-                    "droppedFrames" to dropped,
+                    "droppedFrames" to snapshot.droppedFrames,
+                    "packetLossCount" to sequenceGaps.get(),
+                    "latePacketDrops" to snapshot.latePacketDrops,
+                    "duplicatePackets" to snapshot.duplicatePackets,
+                    "reorderedPackets" to snapshot.reorderedPackets,
                     "underflowCount" to snapshot.underflowCount,
-                    "latencyMs" to -1
+                    "plcCount" to snapshot.plcCount,
+                    "rtpPacketsSent" to rtpPacketsSent.get(),
+                    "rtpPacketsReceived" to rtpPacketsReceived.get(),
+                    "rtpBytesSent" to rtpBytesSent.get(),
+                    "rtpBytesReceived" to rtpBytesReceived.get(),
+                    "rtcpPacketsSent" to rtcpPacketsSent.get(),
+                    "rtcpPacketsReceived" to rtcpPacketsReceived.get(),
+                    "rtcpFractionLost" to rtcpFractionLost.get(),
+                    "rtcpJitter" to rtcpJitter.get(),
+                    "rtcpPacketCount" to rtcpRemotePacketCount.get(),
+                    "rtcpOctetCount" to rtcpRemoteOctetCount.get(),
+                    "roundTripMs" to rtcpRoundTripMs.get(),
+                    "latencyMs" to rtcpRoundTripMs.get(),
+                    "encodeErrorCount" to encodeErrors.get(),
+                    "decodeErrorCount" to decodeErrors.get(),
+                    "udpSendErrorCount" to udpSendErrors.get(),
+                    "udpReceiveErrorCount" to udpReceiveErrors.get()
                 )
             )
         }, 1, 1, TimeUnit.SECONDS)
@@ -792,12 +1017,34 @@ class AudioService(
     }
 
     private fun resetStats() {
-        audioSequence.set(0L)
         bytesSent.set(0L)
         bytesReceived.set(0L)
         framesSent.set(0L)
         framesReceived.set(0L)
-        extraDroppedFrames.set(0L)
+        rtpPacketsSent.set(0L)
+        rtpPacketsReceived.set(0L)
+        rtpBytesSent.set(0L)
+        rtpBytesReceived.set(0L)
+        rtcpPacketsSent.set(0L)
+        rtcpPacketsReceived.set(0L)
+        sequenceGaps.set(0L)
+        udpSendErrors.set(0L)
+        udpReceiveErrors.set(0L)
+        encodeErrors.set(0L)
+        decodeErrors.set(0L)
+        rtcpFractionLost.set(0L)
+        rtcpJitter.set(0L)
+        rtcpRoundTripMs.set(-1L)
+        rtcpRemotePacketCount.set(0L)
+        rtcpRemoteOctetCount.set(0L)
+        sendSequenceNumber = 0
+        sendTimestamp = 0L
+        synchronized(rtpStatsLock) {
+            expectedReceiveSequence = null
+            highestSequenceReceived = 0L
+            lastTransit = null
+            interarrivalJitter = 0.0
+        }
         jitterBuffer.clear()
     }
 
@@ -810,6 +1057,9 @@ class AudioService(
                 "streamId" to streamId,
                 "source" to AudioProtocol.SOURCE_MICROPHONE,
                 "encoding" to AudioProtocol.CODEC_OPUS,
+                "transport" to AudioProtocol.TRANSPORT_RTP_UDP,
+                "codecImpl" to AudioProtocol.CODEC_IMPL_LIBOPUS,
+                "latencyMode" to latencyMode.wireValue,
                 "peerReady" to peerReady,
                 "isStreaming" to (nextState == STATE_STREAMING),
                 "message" to message
@@ -820,17 +1070,16 @@ class AudioService(
     private fun emitAudioError(code: String, message: String, targetStreamId: Long) {
         methodChannel.invokeOnMain(
             "onAudioError",
-            mapOf(
-                "code" to code,
-                "message" to message,
-                "streamId" to targetStreamId
-            )
+            mapOf("code" to code, "message" to message, "streamId" to targetStreamId)
         )
     }
 
     private fun peerSupportsAudio(peerCapabilities: Set<String>): Boolean {
         return peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_LINK) &&
-            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS)
+            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS) &&
+            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP) &&
+            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_RTCP) &&
+            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
     }
 
     private fun nextStreamId(): Long {
@@ -838,22 +1087,29 @@ class AudioService(
         return if (value == 0L) 1L else value
     }
 
-    private fun MethodChannel.invokeOnMain(method: String, arguments: Any?) {
-        mainHandler.post {
-            invokeMethod(method, arguments)
+    private fun randomSsrc(): Long {
+        val value = UUID.randomUUID().leastSignificantBits and 0xffffffffL
+        return if (value == 0L) 1L else value
+    }
+
+    private fun isProbe(data: ByteArray, length: Int, probe: ByteArray): Boolean {
+        if (length != probe.size) return false
+        for (index in probe.indices) {
+            if (data[index] != probe[index]) return false
         }
+        return true
+    }
+
+    private fun MethodChannel.invokeOnMain(method: String, arguments: Any?) {
+        mainHandler.post { invokeMethod(method, arguments) }
     }
 
     private fun MethodChannel.Result.successOnMain(value: Any?) {
-        mainHandler.post {
-            success(value)
-        }
+        mainHandler.post { success(value) }
     }
 
     private fun MethodChannel.Result.errorOnMain(code: String, message: String, details: Any?) {
-        mainHandler.post {
-            error(code, message, details)
-        }
+        mainHandler.post { error(code, message, details) }
     }
 
     private fun Exception.describe(): String {
@@ -871,7 +1127,12 @@ class AudioService(
         const val STATE_CONNECTING = "connecting"
         const val STATE_STREAMING = "streaming"
 
-        private const val BYTES_PER_SAMPLE = 2
-        private const val CODEC_TIMEOUT_US = 10_000L
+        private const val SOCKET_POLL_TIMEOUT_MS = 500
+        private const val PROBE_TIMEOUT_MS = 3000L
+        private const val PROBE_INTERVAL_MS = 200L
+        private const val MAX_DATAGRAM_BYTES = 4096
+        private const val MAX_OPUS_PACKET_BYTES = 1500
+        private val RTP_PROBE = byteArrayOf(0x57, 0x44, 0x41, 0x32, 0x52, 0x54, 0x50)
+        private val RTCP_PROBE = byteArrayOf(0x57, 0x44, 0x41, 0x32, 0x52, 0x54, 0x43, 0x50)
     }
 }

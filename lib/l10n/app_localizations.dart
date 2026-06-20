@@ -830,17 +830,35 @@ abstract class AppLocalizations {
   /// **'Device audio unavailable'**
   String get audioDeviceAudioUnavailable;
 
+  /// No description provided for @audioLatencyMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Latency Mode'**
+  String get audioLatencyMode;
+
+  /// No description provided for @audioLowLatency.
+  ///
+  /// In en, this message translates to:
+  /// **'Low latency'**
+  String get audioLowLatency;
+
+  /// No description provided for @audioStable.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable'**
+  String get audioStable;
+
   /// No description provided for @audioEncoding.
   ///
   /// In en, this message translates to:
   /// **'Encoding'**
   String get audioEncoding;
 
-  /// No description provided for @audioOpus24Kbps.
+  /// No description provided for @audioOpus32Kbps.
   ///
   /// In en, this message translates to:
-  /// **'Opus 24 kbps'**
-  String get audioOpus24Kbps;
+  /// **'Opus 32 kbps'**
+  String get audioOpus32Kbps;
 
   /// No description provided for @audioOnlyOption.
   ///
@@ -889,6 +907,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dropped'**
   String get audioDropped;
+
+  /// No description provided for @audioPacketLoss.
+  ///
+  /// In en, this message translates to:
+  /// **'Packet Loss'**
+  String get audioPacketLoss;
+
+  /// No description provided for @audioLateDrops.
+  ///
+  /// In en, this message translates to:
+  /// **'Late Drops'**
+  String get audioLateDrops;
+
+  /// No description provided for @audioPlc.
+  ///
+  /// In en, this message translates to:
+  /// **'PLC'**
+  String get audioPlc;
+
+  /// No description provided for @audioRtcpLoss.
+  ///
+  /// In en, this message translates to:
+  /// **'RTCP Loss'**
+  String get audioRtcpLoss;
+
+  /// No description provided for @audioRtcpJitter.
+  ///
+  /// In en, this message translates to:
+  /// **'RTCP Jitter'**
+  String get audioRtcpJitter;
+
+  /// No description provided for @audioRoundTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Round Trip'**
+  String get audioRoundTrip;
 
   /// No description provided for @audioFrames.
   ///

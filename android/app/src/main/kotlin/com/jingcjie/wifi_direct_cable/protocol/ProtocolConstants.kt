@@ -19,4 +19,7 @@ object ProtocolConstants {
     const val CAPABILITY_DIAGNOSTICS_EXPORT = "diagnostics.export"
     const val CAPABILITY_AUDIO_LINK = "audio.link"
     const val CAPABILITY_AUDIO_CODEC_OPUS = "audio.codec.opus"
+    const val CAPABILITY_AUDIO_TRANSPORT_RTP = "audio.transport.rtp"
+    const val CAPABILITY_AUDIO_RTCP = "audio.rtcp"
+    const val CAPABILITY_AUDIO_CODEC_LIBOPUS = "audio.codec.libopus"
 }

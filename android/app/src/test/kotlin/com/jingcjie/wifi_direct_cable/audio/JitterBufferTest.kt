@@ -1,46 +1,82 @@
 package com.jingcjie.wifi_direct_cable.audio
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class JitterBufferTest {
     @Test
     fun waitsForInitialTargetBufferThenReturnsInSequenceOrder() {
-        val buffer = JitterBuffer(targetBufferMs = 60, maxBufferMs = 200)
+        val buffer = JitterBuffer(AudioLatencyMode.LOW)
 
         buffer.add(frame(sequence = 3))
         buffer.add(frame(sequence = 1))
 
-        assertNull(buffer.pollReady())
+        assertEquals(JitterBufferPoll.Wait, buffer.pollForPlayback())
 
         buffer.add(frame(sequence = 2))
 
-        assertEquals(1L, buffer.pollReady()?.sequenceNumber)
-        assertEquals(2L, buffer.pollReady()?.sequenceNumber)
-        assertEquals(3L, buffer.pollReady()?.sequenceNumber)
+        assertEquals(1, (buffer.pollForPlayback() as JitterBufferPoll.Packet).frame.sequenceNumber)
+        assertEquals(2, (buffer.pollForPlayback() as JitterBufferPoll.Packet).frame.sequenceNumber)
+        assertEquals(3, (buffer.pollForPlayback() as JitterBufferPoll.Packet).frame.sequenceNumber)
+    }
+
+    @Test
+    fun missingPacketTriggersPlcPathWithoutWaiting() {
+        val buffer = JitterBuffer(AudioLatencyMode.LOW)
+
+        buffer.add(frame(sequence = 1))
+        buffer.add(frame(sequence = 3))
+        buffer.add(frame(sequence = 4))
+
+        assertEquals(1, (buffer.pollForPlayback() as JitterBufferPoll.Packet).frame.sequenceNumber)
+        assertEquals(JitterBufferPoll.Missing, buffer.pollForPlayback())
+        assertEquals(3, (buffer.pollForPlayback() as JitterBufferPoll.Packet).frame.sequenceNumber)
+        assertEquals(1L, buffer.snapshot().plcCount)
     }
 
     @Test
     fun dropsOverflowFrames() {
-        val buffer = JitterBuffer(targetBufferMs = 20, maxBufferMs = 60)
+        val buffer = JitterBuffer(AudioLatencyMode.LOW)
+
+        for (sequence in 1..8) {
+            buffer.add(frame(sequence = sequence))
+        }
+
+        val snapshot = buffer.snapshot()
+        assertTrue(snapshot.bufferLevelMs <= AudioLatencyMode.LOW.maxDelayMs)
+        assertTrue(snapshot.droppedFrames > 0)
+    }
+
+    @Test
+    fun lateAndDuplicatePacketsAreCounted() {
+        val buffer = JitterBuffer(AudioLatencyMode.LOW)
 
         buffer.add(frame(sequence = 1))
         buffer.add(frame(sequence = 2))
         buffer.add(frame(sequence = 3))
-        buffer.add(frame(sequence = 4))
+        buffer.pollForPlayback()
+        buffer.add(frame(sequence = 1))
+        buffer.add(frame(sequence = 3))
+        buffer.add(frame(sequence = 3))
 
         val snapshot = buffer.snapshot()
-        assertEquals(60, snapshot.bufferLevelMs)
-        assertTrue(snapshot.droppedFrames > 0)
+        assertTrue(snapshot.latePacketDrops > 0)
+        assertTrue(snapshot.duplicatePackets > 0)
     }
 
-    private fun frame(sequence: Long): EncodedAudioFrame {
-        return EncodedAudioFrame(
+    @Test
+    fun stableModeUsesLargerDelayBounds() {
+        assertEquals(100, AudioLatencyMode.STABLE.initialDelayMs)
+        assertEquals(80, AudioLatencyMode.STABLE.minDelayMs)
+        assertEquals(220, AudioLatencyMode.STABLE.maxDelayMs)
+    }
+
+    private fun frame(sequence: Int): RtpAudioFrame {
+        return RtpAudioFrame(
             sequenceNumber = sequence,
-            sentAtMs = 1000L + sequence,
-            durationMs = 20,
+            timestamp = sequence * AudioProtocol.RTP_TIMESTAMP_INCREMENT.toLong(),
+            receivedAtMs = 1000L + sequence,
             payload = byteArrayOf(sequence.toByte())
         )
     }

@@ -18,6 +18,7 @@ interface AudioSessionHandler {
 data class AudioSessionInfo(
     val sessionId: String,
     val role: SessionRole,
+    val transportRole: SessionTransportRole,
     val peerAddress: String?,
     val peerCapabilities: Set<String>
 )

@@ -296,40 +296,157 @@ class FileTransferInfo {
 }
 
 class AudioLinkStats {
+  final String latencyMode;
   final int bitrateBps;
   final int bufferLevelMs;
   final int framesSent;
   final int framesReceived;
   final int droppedFrames;
+  final int packetLossCount;
+  final int latePacketDrops;
+  final int duplicatePackets;
+  final int reorderedPackets;
   final int underflowCount;
+  final int plcCount;
+  final int rtpPacketsSent;
+  final int rtpPacketsReceived;
+  final int rtpBytesSent;
+  final int rtpBytesReceived;
+  final int rtcpPacketsSent;
+  final int rtcpPacketsReceived;
+  final int rtcpFractionLost;
+  final int rtcpJitter;
+  final int rtcpPacketCount;
+  final int rtcpOctetCount;
+  final int roundTripMs;
+  final int encodeErrorCount;
+  final int decodeErrorCount;
+  final int udpSendErrorCount;
+  final int udpReceiveErrorCount;
   final int latencyMs;
 
   const AudioLinkStats({
+    this.latencyMode = 'lowLatency',
     this.bitrateBps = 0,
     this.bufferLevelMs = 0,
     this.framesSent = 0,
     this.framesReceived = 0,
     this.droppedFrames = 0,
+    this.packetLossCount = 0,
+    this.latePacketDrops = 0,
+    this.duplicatePackets = 0,
+    this.reorderedPackets = 0,
     this.underflowCount = 0,
+    this.plcCount = 0,
+    this.rtpPacketsSent = 0,
+    this.rtpPacketsReceived = 0,
+    this.rtpBytesSent = 0,
+    this.rtpBytesReceived = 0,
+    this.rtcpPacketsSent = 0,
+    this.rtcpPacketsReceived = 0,
+    this.rtcpFractionLost = 0,
+    this.rtcpJitter = 0,
+    this.rtcpPacketCount = 0,
+    this.rtcpOctetCount = 0,
+    this.roundTripMs = -1,
+    this.encodeErrorCount = 0,
+    this.decodeErrorCount = 0,
+    this.udpSendErrorCount = 0,
+    this.udpReceiveErrorCount = 0,
     this.latencyMs = -1,
   });
 
+  factory AudioLinkStats.fromMap(Map<String, dynamic> map) {
+    return AudioLinkStats(
+      latencyMode: map['latencyMode']?.toString() ?? 'lowLatency',
+      bitrateBps: _intFromMap(map['bitrateBps'], 0),
+      bufferLevelMs: _intFromMap(map['bufferLevelMs'], 0),
+      framesSent: _intFromMap(map['framesSent'], 0),
+      framesReceived: _intFromMap(map['framesReceived'], 0),
+      droppedFrames: _intFromMap(map['droppedFrames'], 0),
+      packetLossCount: _intFromMap(map['packetLossCount'], 0),
+      latePacketDrops: _intFromMap(map['latePacketDrops'], 0),
+      duplicatePackets: _intFromMap(map['duplicatePackets'], 0),
+      reorderedPackets: _intFromMap(map['reorderedPackets'], 0),
+      underflowCount: _intFromMap(map['underflowCount'], 0),
+      plcCount: _intFromMap(map['plcCount'], 0),
+      rtpPacketsSent: _intFromMap(map['rtpPacketsSent'], 0),
+      rtpPacketsReceived: _intFromMap(map['rtpPacketsReceived'], 0),
+      rtpBytesSent: _intFromMap(map['rtpBytesSent'], 0),
+      rtpBytesReceived: _intFromMap(map['rtpBytesReceived'], 0),
+      rtcpPacketsSent: _intFromMap(map['rtcpPacketsSent'], 0),
+      rtcpPacketsReceived: _intFromMap(map['rtcpPacketsReceived'], 0),
+      rtcpFractionLost: _intFromMap(map['rtcpFractionLost'], 0),
+      rtcpJitter: _intFromMap(map['rtcpJitter'], 0),
+      rtcpPacketCount: _intFromMap(map['rtcpPacketCount'], 0),
+      rtcpOctetCount: _intFromMap(map['rtcpOctetCount'], 0),
+      roundTripMs: _intFromMap(map['roundTripMs'], -1),
+      encodeErrorCount: _intFromMap(map['encodeErrorCount'], 0),
+      decodeErrorCount: _intFromMap(map['decodeErrorCount'], 0),
+      udpSendErrorCount: _intFromMap(map['udpSendErrorCount'], 0),
+      udpReceiveErrorCount: _intFromMap(map['udpReceiveErrorCount'], 0),
+      latencyMs: _intFromMap(map['latencyMs'], -1),
+    );
+  }
+
   AudioLinkStats copyWith({
+    String? latencyMode,
     int? bitrateBps,
     int? bufferLevelMs,
     int? framesSent,
     int? framesReceived,
     int? droppedFrames,
+    int? packetLossCount,
+    int? latePacketDrops,
+    int? duplicatePackets,
+    int? reorderedPackets,
     int? underflowCount,
+    int? plcCount,
+    int? rtpPacketsSent,
+    int? rtpPacketsReceived,
+    int? rtpBytesSent,
+    int? rtpBytesReceived,
+    int? rtcpPacketsSent,
+    int? rtcpPacketsReceived,
+    int? rtcpFractionLost,
+    int? rtcpJitter,
+    int? rtcpPacketCount,
+    int? rtcpOctetCount,
+    int? roundTripMs,
+    int? encodeErrorCount,
+    int? decodeErrorCount,
+    int? udpSendErrorCount,
+    int? udpReceiveErrorCount,
     int? latencyMs,
   }) {
     return AudioLinkStats(
+      latencyMode: latencyMode ?? this.latencyMode,
       bitrateBps: bitrateBps ?? this.bitrateBps,
       bufferLevelMs: bufferLevelMs ?? this.bufferLevelMs,
       framesSent: framesSent ?? this.framesSent,
       framesReceived: framesReceived ?? this.framesReceived,
       droppedFrames: droppedFrames ?? this.droppedFrames,
+      packetLossCount: packetLossCount ?? this.packetLossCount,
+      latePacketDrops: latePacketDrops ?? this.latePacketDrops,
+      duplicatePackets: duplicatePackets ?? this.duplicatePackets,
+      reorderedPackets: reorderedPackets ?? this.reorderedPackets,
       underflowCount: underflowCount ?? this.underflowCount,
+      plcCount: plcCount ?? this.plcCount,
+      rtpPacketsSent: rtpPacketsSent ?? this.rtpPacketsSent,
+      rtpPacketsReceived: rtpPacketsReceived ?? this.rtpPacketsReceived,
+      rtpBytesSent: rtpBytesSent ?? this.rtpBytesSent,
+      rtpBytesReceived: rtpBytesReceived ?? this.rtpBytesReceived,
+      rtcpPacketsSent: rtcpPacketsSent ?? this.rtcpPacketsSent,
+      rtcpPacketsReceived: rtcpPacketsReceived ?? this.rtcpPacketsReceived,
+      rtcpFractionLost: rtcpFractionLost ?? this.rtcpFractionLost,
+      rtcpJitter: rtcpJitter ?? this.rtcpJitter,
+      rtcpPacketCount: rtcpPacketCount ?? this.rtcpPacketCount,
+      rtcpOctetCount: rtcpOctetCount ?? this.rtcpOctetCount,
+      roundTripMs: roundTripMs ?? this.roundTripMs,
+      encodeErrorCount: encodeErrorCount ?? this.encodeErrorCount,
+      decodeErrorCount: decodeErrorCount ?? this.decodeErrorCount,
+      udpSendErrorCount: udpSendErrorCount ?? this.udpSendErrorCount,
+      udpReceiveErrorCount: udpReceiveErrorCount ?? this.udpReceiveErrorCount,
       latencyMs: latencyMs ?? this.latencyMs,
     );
   }
@@ -340,13 +457,20 @@ class AudioSupportInfo {
   final bool canSend;
   final bool canReceive;
   final String codec;
+  final String codecImpl;
+  final String transport;
   final String source;
   final int sampleRate;
   final int channels;
   final int frameDurationMs;
   final int bitrateBps;
+  final int rtpPort;
+  final int rtcpPort;
+  final int rtpPayloadType;
+  final List<String> latencyModes;
   final int requiresApiForSend;
   final int androidApi;
+  final String libopusVersion;
   final String message;
 
   const AudioSupportInfo({
@@ -354,29 +478,46 @@ class AudioSupportInfo {
     this.canSend = false,
     this.canReceive = false,
     this.codec = 'opus',
+    this.codecImpl = 'libopus',
+    this.transport = 'rtp-udp',
     this.source = 'microphone',
     this.sampleRate = 48000,
     this.channels = 1,
     this.frameDurationMs = 20,
-    this.bitrateBps = 24000,
-    this.requiresApiForSend = 29,
+    this.bitrateBps = 32000,
+    this.rtpPort = 8990,
+    this.rtcpPort = 8991,
+    this.rtpPayloadType = 111,
+    this.latencyModes = const ['lowLatency', 'stable'],
+    this.requiresApiForSend = 23,
     this.androidApi = 0,
+    this.libopusVersion = '',
     this.message = '',
   });
 
   factory AudioSupportInfo.fromMap(Map<String, dynamic> map) {
+    final latencyModes = map['latencyModes'];
     return AudioSupportInfo(
       audioLinkSupported: map['audioLinkSupported'] == true,
       canSend: map['canSend'] == true,
       canReceive: map['canReceive'] == true,
       codec: map['codec']?.toString() ?? 'opus',
+      codecImpl: map['codecImpl']?.toString() ?? 'libopus',
+      transport: map['transport']?.toString() ?? 'rtp-udp',
       source: map['source']?.toString() ?? 'microphone',
       sampleRate: _intFromMap(map['sampleRate'], 48000),
       channels: _intFromMap(map['channels'], 1),
       frameDurationMs: _intFromMap(map['frameDurationMs'], 20),
-      bitrateBps: _intFromMap(map['bitrateBps'], 24000),
-      requiresApiForSend: _intFromMap(map['requiresApiForSend'], 29),
+      bitrateBps: _intFromMap(map['bitrateBps'], 32000),
+      rtpPort: _intFromMap(map['rtpPort'], 8990),
+      rtcpPort: _intFromMap(map['rtcpPort'], 8991),
+      rtpPayloadType: _intFromMap(map['rtpPayloadType'], 111),
+      latencyModes: latencyModes is List
+          ? latencyModes.map((item) => item.toString()).toList()
+          : const ['lowLatency', 'stable'],
+      requiresApiForSend: _intFromMap(map['requiresApiForSend'], 23),
       androidApi: _intFromMap(map['androidApi'], 0),
+      libopusVersion: map['libopusVersion']?.toString() ?? '',
       message: map['message']?.toString() ?? '',
     );
   }
@@ -419,6 +560,7 @@ class WiFiDirectState {
   final List<FileTransferInfo> recentFileTransfers;
   final AudioSupportInfo audioSupport;
   final String audioMode;
+  final String audioLatencyMode;
   final String audioSource;
   final String audioEncoding;
   final String audioState;
@@ -458,6 +600,7 @@ class WiFiDirectState {
     this.recentFileTransfers = const [],
     this.audioSupport = const AudioSupportInfo(),
     this.audioMode = 'receive',
+    this.audioLatencyMode = 'lowLatency',
     this.audioSource = 'microphone',
     this.audioEncoding = 'opus',
     this.audioState = 'idle',
@@ -498,6 +641,7 @@ class WiFiDirectState {
     List<FileTransferInfo>? recentFileTransfers,
     AudioSupportInfo? audioSupport,
     String? audioMode,
+    String? audioLatencyMode,
     String? audioSource,
     String? audioEncoding,
     String? audioState,
@@ -556,6 +700,7 @@ class WiFiDirectState {
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
       audioSupport: audioSupport ?? this.audioSupport,
       audioMode: audioMode ?? this.audioMode,
+      audioLatencyMode: audioLatencyMode ?? this.audioLatencyMode,
       audioSource: audioSource ?? this.audioSource,
       audioEncoding: audioEncoding ?? this.audioEncoding,
       audioState: audioState ?? this.audioState,
@@ -578,7 +723,10 @@ class WiFiDirectState {
 
   bool get peerSupportsAudio =>
       peerCapabilities.contains('audio.link') &&
-      peerCapabilities.contains('audio.codec.opus');
+      peerCapabilities.contains('audio.codec.opus') &&
+      peerCapabilities.contains('audio.transport.rtp') &&
+      peerCapabilities.contains('audio.rtcp') &&
+      peerCapabilities.contains('audio.codec.libopus');
 
   bool get isAudioActive => audioState != 'idle';
 

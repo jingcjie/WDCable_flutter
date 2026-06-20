@@ -6,6 +6,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import com.jingcjie.wifi_direct_cable.WdCableRuntime
+import com.jingcjie.wifi_direct_cable.audio.NativeOpus
 import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolChannel
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolConstants
@@ -268,6 +269,7 @@ class SessionManager(
         return AudioSessionInfo(
             sessionId = activeRuntime.sessionId,
             role = activeRuntime.role,
+            transportRole = activeRuntime.transportRole,
             peerAddress = activeRuntime.peerAddress,
             peerCapabilities = activeRuntime.peerCapabilities.toSet()
         )
@@ -839,13 +841,20 @@ class SessionManager(
     }
 
     private fun capabilitiesJson(): JSONArray {
-        return JSONArray()
+        val capabilities = JSONArray()
             .put(ProtocolConstants.CAPABILITY_CHAT)
             .put(ProtocolConstants.CAPABILITY_BULK_FILE)
             .put(ProtocolConstants.CAPABILITY_BULK_SPEED)
             .put(ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT)
-            .put(ProtocolConstants.CAPABILITY_AUDIO_LINK)
-            .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS)
+        if (NativeOpus.available) {
+            capabilities
+                .put(ProtocolConstants.CAPABILITY_AUDIO_LINK)
+                .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS)
+                .put(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP)
+                .put(ProtocolConstants.CAPABILITY_AUDIO_RTCP)
+                .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
+        }
+        return capabilities
     }
 
     private fun channelsJson(): JSONObject {
@@ -1884,17 +1893,29 @@ class SessionManager(
                 "role" to activeRuntime.role.eventName,
                 "transportRole" to activeRuntime.transportRole.eventName,
                 "protocolVersion" to ProtocolConstants.VERSION,
-                "capabilities" to listOf(
-                    ProtocolConstants.CAPABILITY_CHAT,
-                    ProtocolConstants.CAPABILITY_BULK_FILE,
-                    ProtocolConstants.CAPABILITY_BULK_SPEED,
-                    ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT,
-                    ProtocolConstants.CAPABILITY_AUDIO_LINK,
-                    ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS
-                ),
+                "capabilities" to localCapabilitiesList(),
                 "peerCapabilities" to activeRuntime.peerCapabilities.toList()
             )
         )
+    }
+
+    private fun localCapabilitiesList(): List<String> {
+        val capabilities = mutableListOf(
+            ProtocolConstants.CAPABILITY_CHAT,
+            ProtocolConstants.CAPABILITY_BULK_FILE,
+            ProtocolConstants.CAPABILITY_BULK_SPEED,
+            ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT
+        )
+        if (NativeOpus.available) {
+            capabilities += listOf(
+                ProtocolConstants.CAPABILITY_AUDIO_LINK,
+                ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS,
+                ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP,
+                ProtocolConstants.CAPABILITY_AUDIO_RTCP,
+                ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS
+            )
+        }
+        return capabilities
     }
 
     private fun emitState(

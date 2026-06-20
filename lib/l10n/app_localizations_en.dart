@@ -417,10 +417,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioDeviceAudioUnavailable => 'Device audio unavailable';
 
   @override
+  String get audioLatencyMode => 'Latency Mode';
+
+  @override
+  String get audioLowLatency => 'Low latency';
+
+  @override
+  String get audioStable => 'Stable';
+
+  @override
   String get audioEncoding => 'Encoding';
 
   @override
-  String get audioOpus24Kbps => 'Opus 24 kbps';
+  String get audioOpus32Kbps => 'Opus 32 kbps';
 
   @override
   String get audioOnlyOption => 'Only option';
@@ -445,6 +454,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioDropped => 'Dropped';
+
+  @override
+  String get audioPacketLoss => 'Packet Loss';
+
+  @override
+  String get audioLateDrops => 'Late Drops';
+
+  @override
+  String get audioPlc => 'PLC';
+
+  @override
+  String get audioRtcpLoss => 'RTCP Loss';
+
+  @override
+  String get audioRtcpJitter => 'RTCP Jitter';
+
+  @override
+  String get audioRoundTrip => 'Round Trip';
 
   @override
   String get audioFrames => 'Frames';

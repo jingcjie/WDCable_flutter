@@ -55,6 +55,48 @@ void main() {
       expect(cleared.audioStreamId, isNull);
       expect(cleared.audioLastError, isNull);
     });
+
+    test('peerSupportsAudio requires all v2 capabilities', () {
+      final v1Only = WiFiDirectState(
+        peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+      );
+      final v2 = WiFiDirectState(
+        peerCapabilities: const [
+          'audio.link',
+          'audio.codec.opus',
+          'audio.transport.rtp',
+          'audio.rtcp',
+          'audio.codec.libopus',
+        ],
+      );
+
+      expect(v1Only.peerSupportsAudio, isFalse);
+      expect(v2.peerSupportsAudio, isTrue);
+    });
+
+    test('AudioLinkStats parses v2 fields with defaults', () {
+      final stats = AudioLinkStats.fromMap({
+        'latencyMode': 'stable',
+        'bitrateBps': '32000',
+        'packetLossCount': 2.0,
+        'latePacketDrops': '3',
+        'plcCount': 4,
+        'rtcpFractionLost': '5',
+        'rtcpJitter': 6,
+        'roundTripMs': '7',
+      });
+
+      expect(stats.latencyMode, 'stable');
+      expect(stats.bitrateBps, 32000);
+      expect(stats.packetLossCount, 2);
+      expect(stats.latePacketDrops, 3);
+      expect(stats.plcCount, 4);
+      expect(stats.rtcpFractionLost, 5);
+      expect(stats.rtcpJitter, 6);
+      expect(stats.roundTripMs, 7);
+      expect(stats.rtpPacketsSent, 0);
+      expect(stats.latencyMs, -1);
+    });
   });
 
   group('WiFiDirectController', () {
@@ -332,8 +374,17 @@ void main() {
               'control.chat',
               'audio.link',
               'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
             ],
-            peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+            peerCapabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+            ],
           ),
         );
         service.emit(FileReceiveStartedEvent('active.bin', 256));
@@ -530,8 +581,20 @@ void main() {
           sessionId: 'session-audio',
           role: 'client',
           protocolVersion: 2,
-          capabilities: const ['audio.link', 'audio.codec.opus'],
-          peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+          capabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
+          peerCapabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
         ),
       );
       await pumpEventQueue();
@@ -558,7 +621,13 @@ void main() {
           framesSent: 0,
           framesReceived: 5,
           droppedFrames: 1,
+          packetLossCount: 2,
+          latePacketDrops: 3,
           underflowCount: 2,
+          plcCount: 4,
+          rtcpFractionLost: 5,
+          rtcpJitter: 6,
+          roundTripMs: 7,
           latencyMs: -1,
         ),
       );
@@ -568,6 +637,12 @@ void main() {
       expect(controller.currentState.audioStreamId, 44);
       expect(controller.currentState.audioStats.bitrateBps, 24000);
       expect(controller.currentState.audioStats.bufferLevelMs, 60);
+      expect(controller.currentState.audioStats.packetLossCount, 2);
+      expect(controller.currentState.audioStats.latePacketDrops, 3);
+      expect(controller.currentState.audioStats.plcCount, 4);
+      expect(controller.currentState.audioStats.rtcpFractionLost, 5);
+      expect(controller.currentState.audioStats.rtcpJitter, 6);
+      expect(controller.currentState.audioStats.roundTripMs, 7);
 
       service.emit(
         AudioErrorEvent(
@@ -602,7 +677,13 @@ void main() {
             sessionId: 'session-no-audio',
             role: 'client',
             protocolVersion: 2,
-            capabilities: const ['audio.link', 'audio.codec.opus'],
+            capabilities: const [
+              'audio.link',
+              'audio.codec.opus',
+              'audio.transport.rtp',
+              'audio.rtcp',
+              'audio.codec.libopus',
+            ],
             peerCapabilities: const ['control.chat'],
           ),
         );
@@ -625,17 +706,31 @@ void main() {
           sessionId: 'session-audio-ready',
           role: 'client',
           protocolVersion: 2,
-          capabilities: const ['audio.link', 'audio.codec.opus'],
-          peerCapabilities: const ['audio.link', 'audio.codec.opus'],
+          capabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
+          peerCapabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
         ),
       );
       await pumpEventQueue();
 
+      await controller.setAudioLatencyMode('stable');
       await controller.startAudio(mode: 'receive');
       await pumpEventQueue();
 
       expect(service.audioStartCalls, 1);
       expect(service.lastAudioMode, 'receive');
+      expect(service.lastAudioLatencyMode, 'stable');
     });
 
     test('ignores duplicate file received completion events', () async {
@@ -677,6 +772,12 @@ void main() {
           'framesSent': 1,
           'framesReceived': '2',
           'droppedFrames': 0,
+          'packetLossCount': '4',
+          'latePacketDrops': 5.0,
+          'plcCount': '6',
+          'rtcpFractionLost': 7,
+          'rtcpJitter': '8',
+          'roundTripMs': 9,
           'underflowCount': '3',
           'latencyMs': -1,
         });
@@ -688,6 +789,12 @@ void main() {
         expect(stats.bufferLevelMs, 80);
         expect(stats.framesReceived, 2);
         expect(stats.underflowCount, 3);
+        expect(stats.packetLossCount, 4);
+        expect(stats.latePacketDrops, 5);
+        expect(stats.plcCount, 6);
+        expect(stats.rtcpFractionLost, 7);
+        expect(stats.rtcpJitter, 8);
+        expect(stats.roundTripMs, 9);
 
         await subscription.cancel();
         service.dispose();
@@ -735,6 +842,7 @@ class _FakeWiFiDirectService extends WiFiDirectService {
   int stopDiscoveryCalls = 0;
   int audioStartCalls = 0;
   String? lastAudioMode;
+  String? lastAudioLatencyMode;
   final List<String> sentMessages = [];
 
   @override
@@ -823,7 +931,14 @@ class _FakeWiFiDirectService extends WiFiDirectService {
       'canSend': true,
       'canReceive': true,
       'codec': 'opus',
+      'codecImpl': 'libopus',
+      'transport': 'rtp-udp',
       'source': 'microphone',
+      'bitrateBps': 32000,
+      'rtpPort': 8990,
+      'rtcpPort': 8991,
+      'rtpPayloadType': 111,
+      'latencyModes': ['lowLatency', 'stable'],
       'message': 'Audio Link is supported',
     };
   }
@@ -833,9 +948,11 @@ class _FakeWiFiDirectService extends WiFiDirectService {
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
+    String latencyMode = 'lowLatency',
   }) async {
     audioStartCalls++;
     lastAudioMode = mode;
+    lastAudioLatencyMode = latencyMode;
     return 'Audio started';
   }
 

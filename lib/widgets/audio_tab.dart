@@ -16,13 +16,18 @@ class AudioTab extends StatefulWidget {
 
 class _AudioTabState extends State<AudioTab> {
   String _mode = 'receive';
+  String _latencyMode = 'lowLatency';
 
   @override
   void initState() {
     super.initState();
     _mode = widget.state.audioMode == 'send' ? 'send' : 'receive';
+    _latencyMode = widget.state.audioLatencyMode == 'stable'
+        ? 'stable'
+        : 'lowLatency';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.controller.loadAudioSupport();
+      widget.controller.loadAudioLatencyMode();
     });
   }
 
@@ -32,6 +37,11 @@ class _AudioTabState extends State<AudioTab> {
     if (oldWidget.state.audioMode != widget.state.audioMode &&
         widget.state.audioMode != 'idle') {
       _mode = widget.state.audioMode;
+    }
+    if (oldWidget.state.audioLatencyMode != widget.state.audioLatencyMode) {
+      _latencyMode = widget.state.audioLatencyMode == 'stable'
+          ? 'stable'
+          : 'lowLatency';
     }
     if (!oldWidget.state.isSessionReady && widget.state.isSessionReady) {
       widget.controller.loadAudioSupport();
@@ -166,6 +176,38 @@ class _AudioTabState extends State<AudioTab> {
                     },
             ),
             const SizedBox(height: 16),
+            Text(
+              AppLocalizations.of(context)!.audioLatencyMode,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: [
+                ButtonSegment(
+                  value: 'lowLatency',
+                  icon: const Icon(Icons.speed),
+                  label: Text(AppLocalizations.of(context)!.audioLowLatency),
+                ),
+                ButtonSegment(
+                  value: 'stable',
+                  icon: const Icon(Icons.shield),
+                  label: Text(AppLocalizations.of(context)!.audioStable),
+                ),
+              ],
+              selected: {_latencyMode},
+              onSelectionChanged: isActive
+                  ? null
+                  : (selection) {
+                      final mode = selection.first;
+                      setState(() {
+                        _latencyMode = mode;
+                      });
+                      widget.controller.setAudioLatencyMode(mode);
+                    },
+            ),
+            const SizedBox(height: 16),
             _buildOptionRow(
               context,
               icon: Icons.input,
@@ -180,7 +222,7 @@ class _AudioTabState extends State<AudioTab> {
               context,
               icon: Icons.settings_voice,
               title: AppLocalizations.of(context)!.audioEncoding,
-              value: AppLocalizations.of(context)!.audioOpus24Kbps,
+              value: AppLocalizations.of(context)!.audioOpus32Kbps,
               trailing: Text(AppLocalizations.of(context)!.audioOnlyOption),
             ),
             const SizedBox(height: 20),
@@ -190,7 +232,10 @@ class _AudioTabState extends State<AudioTab> {
                 onPressed: isActive
                     ? widget.controller.stopAudio
                     : canStart
-                    ? () => widget.controller.startAudio(mode: _mode)
+                    ? () => widget.controller.startAudio(
+                        mode: _mode,
+                        latencyMode: _latencyMode,
+                      )
                     : null,
                 icon: Icon(isActive ? Icons.stop : Icons.play_arrow),
                 label: Text(
@@ -296,13 +341,33 @@ class _AudioTabState extends State<AudioTab> {
                   stats.droppedFrames.toString(),
                 ),
                 _buildStatTile(
+                  AppLocalizations.of(context)!.audioPacketLoss,
+                  stats.packetLossCount.toString(),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioLateDrops,
+                  stats.latePacketDrops.toString(),
+                ),
+                _buildStatTile(
                   AppLocalizations.of(context)!.audioFrames,
                   '${stats.framesSent}/${stats.framesReceived}',
                 ),
                 _buildStatTile(
-                  AppLocalizations.of(context)!.audioLatency,
-                  stats.latencyMs >= 0
-                      ? '${stats.latencyMs} ms'
+                  AppLocalizations.of(context)!.audioPlc,
+                  stats.plcCount.toString(),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioRtcpLoss,
+                  stats.rtcpFractionLost.toString(),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioRtcpJitter,
+                  stats.rtcpJitter.toString(),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioRoundTrip,
+                  stats.roundTripMs >= 0
+                      ? '${stats.roundTripMs} ms'
                       : AppLocalizations.of(context)!.notAvailableShort,
                 ),
               ],

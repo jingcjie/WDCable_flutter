@@ -215,6 +215,7 @@ class AudioStateChangedEvent extends WiFiDirectEvent {
   final int streamId;
   final String source;
   final String encoding;
+  final String latencyMode;
   final bool peerReady;
   final bool isStreaming;
   final String message;
@@ -225,6 +226,7 @@ class AudioStateChangedEvent extends WiFiDirectEvent {
     required this.streamId,
     required this.source,
     required this.encoding,
+    this.latencyMode = 'lowLatency',
     required this.peerReady,
     required this.isStreaming,
     required this.message,
@@ -235,24 +237,66 @@ class AudioStatsEvent extends WiFiDirectEvent {
   final String mode;
   final String state;
   final int streamId;
+  final String latencyMode;
   final int bitrateBps;
   final int bufferLevelMs;
   final int framesSent;
   final int framesReceived;
   final int droppedFrames;
+  final int packetLossCount;
+  final int latePacketDrops;
+  final int duplicatePackets;
+  final int reorderedPackets;
   final int underflowCount;
+  final int plcCount;
+  final int rtpPacketsSent;
+  final int rtpPacketsReceived;
+  final int rtpBytesSent;
+  final int rtpBytesReceived;
+  final int rtcpPacketsSent;
+  final int rtcpPacketsReceived;
+  final int rtcpFractionLost;
+  final int rtcpJitter;
+  final int rtcpPacketCount;
+  final int rtcpOctetCount;
+  final int roundTripMs;
+  final int encodeErrorCount;
+  final int decodeErrorCount;
+  final int udpSendErrorCount;
+  final int udpReceiveErrorCount;
   final int latencyMs;
 
   AudioStatsEvent({
     required this.mode,
     required this.state,
     required this.streamId,
+    this.latencyMode = 'lowLatency',
     required this.bitrateBps,
     required this.bufferLevelMs,
     required this.framesSent,
     required this.framesReceived,
     required this.droppedFrames,
+    this.packetLossCount = 0,
+    this.latePacketDrops = 0,
+    this.duplicatePackets = 0,
+    this.reorderedPackets = 0,
     required this.underflowCount,
+    this.plcCount = 0,
+    this.rtpPacketsSent = 0,
+    this.rtpPacketsReceived = 0,
+    this.rtpBytesSent = 0,
+    this.rtpBytesReceived = 0,
+    this.rtcpPacketsSent = 0,
+    this.rtcpPacketsReceived = 0,
+    this.rtcpFractionLost = 0,
+    this.rtcpJitter = 0,
+    this.rtcpPacketCount = 0,
+    this.rtcpOctetCount = 0,
+    this.roundTripMs = -1,
+    this.encodeErrorCount = 0,
+    this.decodeErrorCount = 0,
+    this.udpSendErrorCount = 0,
+    this.udpReceiveErrorCount = 0,
     required this.latencyMs,
   });
 }
@@ -583,6 +627,7 @@ class WiFiDirectService {
               streamId: _readInt(audioData['streamId']),
               source: audioData['source']?.toString() ?? 'microphone',
               encoding: audioData['encoding']?.toString() ?? 'opus',
+              latencyMode: audioData['latencyMode']?.toString() ?? 'lowLatency',
               peerReady: audioData['peerReady'] == true,
               isStreaming: audioData['isStreaming'] == true,
               message: audioData['message']?.toString() ?? '',
@@ -599,12 +644,33 @@ class WiFiDirectService {
               mode: statsData['mode']?.toString() ?? 'idle',
               state: statsData['state']?.toString() ?? 'idle',
               streamId: _readInt(statsData['streamId']),
+              latencyMode: statsData['latencyMode']?.toString() ?? 'lowLatency',
               bitrateBps: _readInt(statsData['bitrateBps']),
               bufferLevelMs: _readInt(statsData['bufferLevelMs']),
               framesSent: _readInt(statsData['framesSent']),
               framesReceived: _readInt(statsData['framesReceived']),
               droppedFrames: _readInt(statsData['droppedFrames']),
+              packetLossCount: _readInt(statsData['packetLossCount']),
+              latePacketDrops: _readInt(statsData['latePacketDrops']),
+              duplicatePackets: _readInt(statsData['duplicatePackets']),
+              reorderedPackets: _readInt(statsData['reorderedPackets']),
               underflowCount: _readInt(statsData['underflowCount']),
+              plcCount: _readInt(statsData['plcCount']),
+              rtpPacketsSent: _readInt(statsData['rtpPacketsSent']),
+              rtpPacketsReceived: _readInt(statsData['rtpPacketsReceived']),
+              rtpBytesSent: _readInt(statsData['rtpBytesSent']),
+              rtpBytesReceived: _readInt(statsData['rtpBytesReceived']),
+              rtcpPacketsSent: _readInt(statsData['rtcpPacketsSent']),
+              rtcpPacketsReceived: _readInt(statsData['rtcpPacketsReceived']),
+              rtcpFractionLost: _readInt(statsData['rtcpFractionLost']),
+              rtcpJitter: _readInt(statsData['rtcpJitter']),
+              rtcpPacketCount: _readInt(statsData['rtcpPacketCount']),
+              rtcpOctetCount: _readInt(statsData['rtcpOctetCount']),
+              roundTripMs: _readInt(statsData['roundTripMs']),
+              encodeErrorCount: _readInt(statsData['encodeErrorCount']),
+              decodeErrorCount: _readInt(statsData['decodeErrorCount']),
+              udpSendErrorCount: _readInt(statsData['udpSendErrorCount']),
+              udpReceiveErrorCount: _readInt(statsData['udpReceiveErrorCount']),
               latencyMs: _readInt(statsData['latencyMs']),
             ),
           );
@@ -844,12 +910,14 @@ class WiFiDirectService {
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
+    String latencyMode = 'lowLatency',
   }) async {
     try {
       final String result = await _channel.invokeMethod('startAudio', {
         'mode': mode,
         'source': source,
         'encoding': encoding,
+        'latencyMode': latencyMode,
       });
       return result;
     } catch (e) {

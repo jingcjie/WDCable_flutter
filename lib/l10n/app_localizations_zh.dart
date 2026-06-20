@@ -408,10 +408,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioDeviceAudioUnavailable => '设备音频暂不可用';
 
   @override
+  String get audioLatencyMode => '延迟模式';
+
+  @override
+  String get audioLowLatency => '低延迟';
+
+  @override
+  String get audioStable => '稳定';
+
+  @override
   String get audioEncoding => '编码';
 
   @override
-  String get audioOpus24Kbps => 'Opus 24 kbps';
+  String get audioOpus32Kbps => 'Opus 32 kbps';
 
   @override
   String get audioOnlyOption => '唯一选项';
@@ -436,6 +445,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioDropped => '丢帧';
+
+  @override
+  String get audioPacketLoss => '丢包';
+
+  @override
+  String get audioLateDrops => '迟到丢包';
+
+  @override
+  String get audioPlc => '丢包补偿';
+
+  @override
+  String get audioRtcpLoss => 'RTCP 丢包';
+
+  @override
+  String get audioRtcpJitter => 'RTCP 抖动';
+
+  @override
+  String get audioRoundTrip => '往返';
 
   @override
   String get audioFrames => '帧';

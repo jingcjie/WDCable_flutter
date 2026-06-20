@@ -109,7 +109,8 @@ class FlutterMethodChannelHandler(
                 val mode = call.argument<String>("mode")
                 val source = call.argument<String>("source")
                 val encoding = call.argument<String>("encoding")
-                audioService.startAudio(mode, source, encoding, result)
+                val latencyMode = call.argument<String>("latencyMode")
+                audioService.startAudio(mode, source, encoding, latencyMode, result)
             }
             "stopAudio" -> {
                 audioService.stopAudio(result)
