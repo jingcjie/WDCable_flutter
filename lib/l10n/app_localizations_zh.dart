@@ -453,6 +453,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioLateDrops => '迟到丢包';
 
   @override
+  String get audioOverflowDrops => '溢出丢包';
+
+  @override
   String get audioPlc => '丢包补偿';
 
   @override

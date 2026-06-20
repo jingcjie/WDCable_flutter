@@ -304,6 +304,7 @@ class AudioLinkStats {
   final int droppedFrames;
   final int packetLossCount;
   final int latePacketDrops;
+  final int overflowDrops;
   final int duplicatePackets;
   final int reorderedPackets;
   final int underflowCount;
@@ -334,6 +335,7 @@ class AudioLinkStats {
     this.droppedFrames = 0,
     this.packetLossCount = 0,
     this.latePacketDrops = 0,
+    this.overflowDrops = 0,
     this.duplicatePackets = 0,
     this.reorderedPackets = 0,
     this.underflowCount = 0,
@@ -366,6 +368,7 @@ class AudioLinkStats {
       droppedFrames: _intFromMap(map['droppedFrames'], 0),
       packetLossCount: _intFromMap(map['packetLossCount'], 0),
       latePacketDrops: _intFromMap(map['latePacketDrops'], 0),
+      overflowDrops: _intFromMap(map['overflowDrops'], 0),
       duplicatePackets: _intFromMap(map['duplicatePackets'], 0),
       reorderedPackets: _intFromMap(map['reorderedPackets'], 0),
       underflowCount: _intFromMap(map['underflowCount'], 0),
@@ -398,6 +401,7 @@ class AudioLinkStats {
     int? droppedFrames,
     int? packetLossCount,
     int? latePacketDrops,
+    int? overflowDrops,
     int? duplicatePackets,
     int? reorderedPackets,
     int? underflowCount,
@@ -428,6 +432,7 @@ class AudioLinkStats {
       droppedFrames: droppedFrames ?? this.droppedFrames,
       packetLossCount: packetLossCount ?? this.packetLossCount,
       latePacketDrops: latePacketDrops ?? this.latePacketDrops,
+      overflowDrops: overflowDrops ?? this.overflowDrops,
       duplicatePackets: duplicatePackets ?? this.duplicatePackets,
       reorderedPackets: reorderedPackets ?? this.reorderedPackets,
       underflowCount: underflowCount ?? this.underflowCount,

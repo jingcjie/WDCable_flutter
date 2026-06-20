@@ -139,6 +139,7 @@ class _AudioTabState extends State<AudioTab> {
   }
 
   Widget _buildControls(BuildContext context, bool canStart, bool isActive) {
+    final isSendMode = _mode == 'send';
     return Card(
       elevation: 2,
       child: Padding(
@@ -175,38 +176,40 @@ class _AudioTabState extends State<AudioTab> {
                       });
                     },
             ),
-            const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context)!.audioLatencyMode,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: [
-                ButtonSegment(
-                  value: 'lowLatency',
-                  icon: const Icon(Icons.speed),
-                  label: Text(AppLocalizations.of(context)!.audioLowLatency),
-                ),
-                ButtonSegment(
-                  value: 'stable',
-                  icon: const Icon(Icons.shield),
-                  label: Text(AppLocalizations.of(context)!.audioStable),
-                ),
-              ],
-              selected: {_latencyMode},
-              onSelectionChanged: isActive
-                  ? null
-                  : (selection) {
-                      final mode = selection.first;
-                      setState(() {
-                        _latencyMode = mode;
-                      });
-                      widget.controller.setAudioLatencyMode(mode);
-                    },
-            ),
+            if (isSendMode) ...[
+              const SizedBox(height: 16),
+              Text(
+                AppLocalizations.of(context)!.audioLatencyMode,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(
+                    value: 'lowLatency',
+                    icon: const Icon(Icons.speed),
+                    label: Text(AppLocalizations.of(context)!.audioLowLatency),
+                  ),
+                  ButtonSegment(
+                    value: 'stable',
+                    icon: const Icon(Icons.shield),
+                    label: Text(AppLocalizations.of(context)!.audioStable),
+                  ),
+                ],
+                selected: {_latencyMode},
+                onSelectionChanged: isActive
+                    ? null
+                    : (selection) {
+                        final mode = selection.first;
+                        setState(() {
+                          _latencyMode = mode;
+                        });
+                        widget.controller.setAudioLatencyMode(mode);
+                      },
+              ),
+            ],
             const SizedBox(height: 16),
             _buildOptionRow(
               context,
@@ -234,7 +237,7 @@ class _AudioTabState extends State<AudioTab> {
                     : canStart
                     ? () => widget.controller.startAudio(
                         mode: _mode,
-                        latencyMode: _latencyMode,
+                        latencyMode: isSendMode ? _latencyMode : null,
                       )
                     : null,
                 icon: Icon(isActive ? Icons.stop : Icons.play_arrow),
@@ -329,6 +332,10 @@ class _AudioTabState extends State<AudioTab> {
                   _formatState(widget.state.audioState),
                 ),
                 _buildStatTile(
+                  AppLocalizations.of(context)!.audioLatency,
+                  _formatLatencyMode(stats.latencyMode),
+                ),
+                _buildStatTile(
                   AppLocalizations.of(context)!.audioBitrate,
                   _formatBitrate(stats.bitrateBps),
                 ),
@@ -347,6 +354,10 @@ class _AudioTabState extends State<AudioTab> {
                 _buildStatTile(
                   AppLocalizations.of(context)!.audioLateDrops,
                   stats.latePacketDrops.toString(),
+                ),
+                _buildStatTile(
+                  AppLocalizations.of(context)!.audioOverflowDrops,
+                  stats.overflowDrops.toString(),
                 ),
                 _buildStatTile(
                   AppLocalizations.of(context)!.audioFrames,
@@ -426,5 +437,11 @@ class _AudioTabState extends State<AudioTab> {
     final unit = AppLocalizations.of(context)!.kbpsUnit;
     if (bitrateBps <= 0) return '0 $unit';
     return '${(bitrateBps / 1000).toStringAsFixed(1)} $unit';
+  }
+
+  String _formatLatencyMode(String value) {
+    return value == 'stable'
+        ? AppLocalizations.of(context)!.audioStable
+        : AppLocalizations.of(context)!.audioLowLatency;
   }
 }

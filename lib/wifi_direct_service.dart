@@ -245,6 +245,7 @@ class AudioStatsEvent extends WiFiDirectEvent {
   final int droppedFrames;
   final int packetLossCount;
   final int latePacketDrops;
+  final int overflowDrops;
   final int duplicatePackets;
   final int reorderedPackets;
   final int underflowCount;
@@ -278,6 +279,7 @@ class AudioStatsEvent extends WiFiDirectEvent {
     required this.droppedFrames,
     this.packetLossCount = 0,
     this.latePacketDrops = 0,
+    this.overflowDrops = 0,
     this.duplicatePackets = 0,
     this.reorderedPackets = 0,
     required this.underflowCount,
@@ -652,6 +654,7 @@ class WiFiDirectService {
               droppedFrames: _readInt(statsData['droppedFrames']),
               packetLossCount: _readInt(statsData['packetLossCount']),
               latePacketDrops: _readInt(statsData['latePacketDrops']),
+              overflowDrops: _readInt(statsData['overflowDrops']),
               duplicatePackets: _readInt(statsData['duplicatePackets']),
               reorderedPackets: _readInt(statsData['reorderedPackets']),
               underflowCount: _readInt(statsData['underflowCount']),
@@ -910,15 +913,21 @@ class WiFiDirectService {
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
-    String latencyMode = 'lowLatency',
+    String? latencyMode,
   }) async {
     try {
-      final String result = await _channel.invokeMethod('startAudio', {
+      final arguments = <String, Object?>{
         'mode': mode,
         'source': source,
         'encoding': encoding,
-        'latencyMode': latencyMode,
-      });
+      };
+      if (latencyMode != null) {
+        arguments['latencyMode'] = latencyMode;
+      }
+      final String result = await _channel.invokeMethod(
+        'startAudio',
+        arguments,
+      );
       return result;
     } catch (e) {
       throw Exception('Failed to start audio: $e');

@@ -15,7 +15,9 @@ class AudioProtocolTest {
             streamId = 99L,
             offerId = "offer-1",
             rtpSsrc = 0xabcdef01L,
-            transportRole = SessionTransportRole.LISTENER
+            transportRole = SessionTransportRole.LISTENER,
+            latencyMode = AudioProtocol.LATENCY_STABLE,
+            bitrateBps = AudioProtocol.BITRATE_BPS
         )
 
         val offer = AudioProtocol.parseOffer(metadata)
@@ -28,6 +30,8 @@ class AudioProtocolTest {
         assertEquals(AudioProtocol.CODEC_IMPL_LIBOPUS, offer.codecImpl)
         assertEquals(AudioProtocol.SAMPLE_RATE, offer.sampleRate)
         assertEquals(AudioProtocol.CHANNELS, offer.channels)
+        assertEquals(AudioProtocol.LATENCY_STABLE, offer.latencyMode)
+        assertEquals(AudioProtocol.BITRATE_BPS, offer.bitrateBps)
         assertEquals(AudioProtocol.RTP_PAYLOAD_TYPE, offer.rtpPayloadType)
         assertEquals(0xabcdef01L, offer.rtpSsrc)
         assertEquals(SessionTransportRole.LISTENER, offer.transportRole)
@@ -41,7 +45,9 @@ class AudioProtocolTest {
             offerId = "offer-2",
             rtpSsrc = 0x12345678L,
             transportRole = SessionTransportRole.CONNECTOR,
-            receiverProbeRequired = true
+            receiverProbeRequired = true,
+            latencyMode = AudioProtocol.LATENCY_STABLE,
+            bitrateBps = AudioProtocol.BITRATE_BPS
         )
 
         val accept = AudioProtocol.parseAccept(metadata)
@@ -50,10 +56,68 @@ class AudioProtocolTest {
         assertEquals("offer-2", accept.offerId)
         assertEquals(AudioProtocol.TRANSPORT_RTP_UDP, accept.transport)
         assertEquals(AudioProtocol.CODEC_IMPL_LIBOPUS, accept.codecImpl)
+        assertEquals(AudioProtocol.LATENCY_STABLE, accept.latencyMode)
+        assertEquals(AudioProtocol.BITRATE_BPS, accept.bitrateBps)
         assertEquals(0x12345678L, accept.rtpSsrc)
         assertEquals(SessionTransportRole.CONNECTOR, accept.transportRole)
         assertTrue(accept.receiverProbeRequired)
         assertTrue(AudioProtocol.validateAccept(accept))
+    }
+
+    @Test
+    fun acceptEchoesOfferedLatencyAndBitrate() {
+        val offer = AudioProtocol.parseOffer(
+            AudioProtocol.offer(
+                streamId = 34L,
+                offerId = "offer-echo",
+                rtpSsrc = 0x11223344L,
+                transportRole = SessionTransportRole.LISTENER,
+                latencyMode = AudioProtocol.LATENCY_STABLE,
+                bitrateBps = AudioProtocol.BITRATE_BPS
+            )
+        )
+
+        val accept = AudioProtocol.parseAccept(
+            AudioProtocol.accept(
+                streamId = offer.streamId,
+                offerId = offer.offerId,
+                rtpSsrc = 0x55667788L,
+                transportRole = SessionTransportRole.CONNECTOR,
+                receiverProbeRequired = true,
+                latencyMode = offer.latencyMode,
+                bitrateBps = offer.bitrateBps
+            )
+        )
+
+        assertEquals(offer.latencyMode, accept.latencyMode)
+        assertEquals(offer.bitrateBps, accept.bitrateBps)
+    }
+
+    @Test
+    fun unsupportedLatencyOrBitrateIsRejected() {
+        val unsupportedLatency = AudioProtocol.parseOffer(
+            AudioProtocol.offer(
+                streamId = 45L,
+                offerId = "offer-bad-latency",
+                rtpSsrc = 1L,
+                transportRole = SessionTransportRole.LISTENER,
+                latencyMode = "receiverChoice",
+                bitrateBps = AudioProtocol.BITRATE_BPS
+            )
+        )
+        val unsupportedBitrate = AudioProtocol.parseOffer(
+            AudioProtocol.offer(
+                streamId = 46L,
+                offerId = "offer-bad-bitrate",
+                rtpSsrc = 2L,
+                transportRole = SessionTransportRole.LISTENER,
+                latencyMode = AudioProtocol.LATENCY_LOW,
+                bitrateBps = 24_000
+            )
+        )
+
+        assertFalse(AudioProtocol.validateOffer(unsupportedLatency))
+        assertFalse(AudioProtocol.validateOffer(unsupportedBitrate))
     }
 
     @Test
@@ -70,6 +134,7 @@ class AudioProtocolTest {
                     .put("sampleRate", AudioProtocol.SAMPLE_RATE)
                     .put("channels", AudioProtocol.CHANNELS)
                     .put("frameDurationMs", AudioProtocol.FRAME_DURATION_MS)
+                    .put("latencyMode", AudioProtocol.LATENCY_LOW)
                     .put("bitrateBps", AudioProtocol.BITRATE_BPS)
                     .put("rtpPayloadType", AudioProtocol.RTP_PAYLOAD_TYPE)
                     .put("rtpClockRate", AudioProtocol.RTP_CLOCK_RATE)

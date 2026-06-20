@@ -112,6 +112,9 @@ class AudioService(
     private var latencyMode: AudioLatencyMode = AudioLatencyMode.LOW
 
     @Volatile
+    private var streamBitrateBps: Int = AudioProtocol.BITRATE_BPS
+
+    @Volatile
     private var jitterBuffer: JitterBuffer = JitterBuffer(AudioLatencyMode.LOW)
 
     @Volatile
@@ -206,7 +209,12 @@ class AudioService(
                 result.error(AudioProtocol.ERROR_BUSY, "Audio Link is already active", null)
                 return
             }
-            latencyMode = AudioLatencyMode.fromWire(requestedLatencyMode)
+            latencyMode = if (normalizedMode == MODE_SEND) {
+                AudioLatencyMode.fromWire(requestedLatencyMode)
+            } else {
+                AudioLatencyMode.LOW
+            }
+            streamBitrateBps = AudioProtocol.BITRATE_BPS
             jitterBuffer = JitterBuffer(latencyMode)
             localTransportRole = info.transportRole
             peerAddress = info.peerAddress
@@ -351,7 +359,14 @@ class AudioService(
         controlExecutor.execute {
             try {
                 sessionManager.sendAudioControl(
-                    AudioProtocol.offer(newStreamId, newOfferId, ssrc, info.transportRole)
+                    AudioProtocol.offer(
+                        newStreamId,
+                        newOfferId,
+                        ssrc,
+                        info.transportRole,
+                        latencyMode.wireValue,
+                        streamBitrateBps
+                    )
                 )
                 emitAudioState(STATE_OFFER_SENT, "Audio offer sent")
                 result.successOnMain("Audio send offer sent")
@@ -389,6 +404,7 @@ class AudioService(
 
         val ssrc = randomSsrc()
         val probeRequired = AudioProtocol.receiverProbeRequired(info.transportRole)
+        val offeredLatencyMode = AudioLatencyMode.fromWire(offer.latencyMode)
         synchronized(stateLock) {
             streamId = offer.streamId
             offerId = offer.offerId
@@ -400,10 +416,21 @@ class AudioService(
             localTransportRole = info.transportRole
             peerAddress = info.peerAddress
             receiverProbeRequired = probeRequired
+            latencyMode = offeredLatencyMode
+            streamBitrateBps = offer.bitrateBps
+            jitterBuffer = JitterBuffer(offeredLatencyMode)
         }
         try {
             sessionManager.sendAudioControl(
-                AudioProtocol.accept(offer.streamId, offer.offerId, ssrc, info.transportRole, probeRequired)
+                AudioProtocol.accept(
+                    offer.streamId,
+                    offer.offerId,
+                    ssrc,
+                    info.transportRole,
+                    probeRequired,
+                    offer.latencyMode,
+                    offer.bitrateBps
+                )
             )
             emitAudioState(STATE_CONNECTING, "Audio offer accepted")
             startUdpTransport()
@@ -426,6 +453,10 @@ class AudioService(
         }
         if (!AudioProtocol.validateAccept(accept)) {
             failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted an unsupported RTP/libopus format", accept.streamId)
+            return
+        }
+        if (accept.latencyMode != latencyMode.wireValue || accept.bitrateBps != streamBitrateBps) {
+            failAudio(AudioProtocol.ERROR_RTP_UNSUPPORTED, "Peer accepted a different RTP/libopus stream configuration", accept.streamId)
             return
         }
 
@@ -476,7 +507,8 @@ class AudioService(
                     "rtpBindEndpoint" to newRtpSocket.localSocketAddress.toString(),
                     "rtcpBindEndpoint" to newRtcpSocket.localSocketAddress.toString(),
                     "receiverProbeRequired" to receiverProbeRequired,
-                    "latencyMode" to latencyMode.wireValue
+                    "latencyMode" to latencyMode.wireValue,
+                    "streamBitrateBps" to streamBitrateBps
                 )
             )
 
@@ -711,7 +743,7 @@ class AudioService(
                 .setBufferSizeInBytes(recordBufferSize)
                 .build()
 
-            encoderHandle = NativeOpus.createEncoder(AudioProtocol.SAMPLE_RATE, AudioProtocol.CHANNELS, AudioProtocol.BITRATE_BPS)
+            encoderHandle = NativeOpus.createEncoder(AudioProtocol.SAMPLE_RATE, AudioProtocol.CHANNELS, streamBitrateBps)
             check(encoderHandle != 0L) { "Could not create libopus encoder" }
             recorder.startRecording()
 
@@ -815,7 +847,9 @@ class AudioService(
                             audioTrack.write(silence, 0, silence.size)
                         }
                     }
-                    JitterBufferPoll.Wait -> Thread.sleep(5)
+                    is JitterBufferPoll.Wait -> {
+                        Thread.sleep(next.waitMs.coerceIn(1L, AudioProtocol.FRAME_DURATION_MS.toLong()))
+                    }
                 }
             }
         } catch (exception: Exception) {
@@ -935,6 +969,9 @@ class AudioService(
             localSsrc = 0L
             remoteSsrc = 0L
             receiverProbeRequired = false
+            latencyMode = AudioLatencyMode.LOW
+            streamBitrateBps = AudioProtocol.BITRATE_BPS
+            jitterBuffer = JitterBuffer(AudioLatencyMode.LOW)
             rtpDestination = null
             rtcpDestination = null
             expectedReceiveSequence = null
@@ -986,6 +1023,7 @@ class AudioService(
                     "droppedFrames" to snapshot.droppedFrames,
                     "packetLossCount" to sequenceGaps.get(),
                     "latePacketDrops" to snapshot.latePacketDrops,
+                    "overflowDrops" to snapshot.overflowDrops,
                     "duplicatePackets" to snapshot.duplicatePackets,
                     "reorderedPackets" to snapshot.reorderedPackets,
                     "underflowCount" to snapshot.underflowCount,

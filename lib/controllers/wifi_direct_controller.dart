@@ -585,7 +585,9 @@ class WiFiDirectController {
     _updateState(
       _currentState.copyWith(
         audioMode: event.mode == 'idle' ? _currentState.audioMode : event.mode,
-        audioLatencyMode: event.latencyMode,
+        audioLatencyMode: event.mode == 'send'
+            ? event.latencyMode
+            : _currentState.audioLatencyMode,
         audioState: event.state,
         audioSource: event.source,
         audioEncoding: event.encoding,
@@ -612,6 +614,7 @@ class WiFiDirectController {
           droppedFrames: event.droppedFrames,
           packetLossCount: event.packetLossCount,
           latePacketDrops: event.latePacketDrops,
+          overflowDrops: event.overflowDrops,
           duplicatePackets: event.duplicatePackets,
           reorderedPackets: event.reorderedPackets,
           underflowCount: event.underflowCount,
@@ -1158,11 +1161,16 @@ class WiFiDirectController {
       return;
     }
 
+    final selectedLatencyMode = mode == 'send'
+        ? (latencyMode ?? _currentState.audioLatencyMode)
+        : null;
+
     try {
       _updateState(
         _currentState.copyWith(
           audioMode: mode,
-          audioLatencyMode: latencyMode ?? _currentState.audioLatencyMode,
+          audioLatencyMode:
+              selectedLatencyMode ?? _currentState.audioLatencyMode,
           audioSource: source,
           audioEncoding: encoding,
           audioLastError: null,
@@ -1172,7 +1180,7 @@ class WiFiDirectController {
         mode: mode,
         source: source,
         encoding: encoding,
-        latencyMode: latencyMode ?? _currentState.audioLatencyMode,
+        latencyMode: selectedLatencyMode,
       );
       _addLog(result);
     } catch (e) {

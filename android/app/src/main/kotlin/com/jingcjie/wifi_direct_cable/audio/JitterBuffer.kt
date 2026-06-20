@@ -1,5 +1,6 @@
 package com.jingcjie.wifi_direct_cable.audio
 
+import android.os.SystemClock
 import java.util.TreeMap
 
 enum class AudioLatencyMode(
@@ -29,6 +30,7 @@ data class JitterBufferSnapshot(
     val bufferLevelMs: Int,
     val droppedFrames: Long,
     val latePacketDrops: Long,
+    val overflowDrops: Long,
     val duplicatePackets: Long,
     val reorderedPackets: Long,
     val underflowCount: Long,
@@ -39,19 +41,23 @@ data class JitterBufferSnapshot(
 sealed class JitterBufferPoll {
     data class Packet(val frame: RtpAudioFrame) : JitterBufferPoll()
     data object Missing : JitterBufferPoll()
-    data object Wait : JitterBufferPoll()
+    data class Wait(val waitMs: Long) : JitterBufferPoll()
 }
 
 class JitterBuffer(
-    private val latencyMode: AudioLatencyMode = AudioLatencyMode.LOW
+    private val latencyMode: AudioLatencyMode = AudioLatencyMode.LOW,
+    private val clockMs: () -> Long = { SystemClock.elapsedRealtime() }
 ) {
     private val lock = Any()
     private val frames = TreeMap<Int, RtpAudioFrame>()
     private var started = false
     private var expectedSequence: Int? = null
     private var highestSequence: Int? = null
+    private var initialPlayoutAtMs: Long? = null
+    private var nextPlayoutAtMs: Long? = null
     private var droppedFrames: Long = 0
     private var latePacketDrops: Long = 0
+    private var overflowDrops: Long = 0
     private var duplicatePackets: Long = 0
     private var reorderedPackets: Long = 0
     private var underflowCount: Long = 0
@@ -70,6 +76,9 @@ class JitterBuffer(
                 droppedFrames++
                 return
             }
+            if (initialPlayoutAtMs == null && !started) {
+                initialPlayoutAtMs = clockMs() + latencyMode.initialDelayMs
+            }
             val highest = highestSequence
             if (highest != null) {
                 if (RtpCodec.isSequenceBefore(frame.sequenceNumber, highest)) {
@@ -87,20 +96,31 @@ class JitterBuffer(
 
     fun pollForPlayback(): JitterBufferPoll {
         synchronized(lock) {
+            val nowMs = clockMs()
             if (!started) {
                 if (frames.isEmpty()) {
-                    return JitterBufferPoll.Wait
+                    return JitterBufferPoll.Wait(DEFAULT_WAIT_MS)
                 }
-                if (bufferLevelLocked() < latencyMode.initialDelayMs) {
-                    return JitterBufferPoll.Wait
+                val initialDeadline = initialPlayoutAtMs ?: (nowMs + latencyMode.initialDelayMs).also {
+                    initialPlayoutAtMs = it
+                }
+                if (nowMs < initialDeadline) {
+                    return JitterBufferPoll.Wait(initialDeadline - nowMs)
                 }
                 expectedSequence = frames.firstKey()
+                nextPlayoutAtMs = initialDeadline
                 started = true
             }
 
-            val expected = expectedSequence ?: return JitterBufferPoll.Wait
+            val playoutDeadline = nextPlayoutAtMs ?: nowMs
+            if (nowMs < playoutDeadline) {
+                return JitterBufferPoll.Wait(playoutDeadline - nowMs)
+            }
+
+            val expected = expectedSequence ?: return JitterBufferPoll.Wait(DEFAULT_WAIT_MS)
             val frame = frames.remove(expected)
             expectedSequence = RtpCodec.nextSequence(expected)
+            nextPlayoutAtMs = playoutDeadline + AudioProtocol.FRAME_DURATION_MS
             return if (frame != null) {
                 JitterBufferPoll.Packet(frame)
             } else {
@@ -117,8 +137,11 @@ class JitterBuffer(
             started = false
             expectedSequence = null
             highestSequence = null
+            initialPlayoutAtMs = null
+            nextPlayoutAtMs = null
             droppedFrames = 0
             latePacketDrops = 0
+            overflowDrops = 0
             duplicatePackets = 0
             reorderedPackets = 0
             underflowCount = 0
@@ -132,6 +155,7 @@ class JitterBuffer(
                 bufferLevelMs = bufferLevelLocked(),
                 droppedFrames = droppedFrames,
                 latePacketDrops = latePacketDrops,
+                overflowDrops = overflowDrops,
                 duplicatePackets = duplicatePackets,
                 reorderedPackets = reorderedPackets,
                 underflowCount = underflowCount,
@@ -145,9 +169,13 @@ class JitterBuffer(
         while (bufferLevelLocked() > latencyMode.maxDelayMs && frames.isNotEmpty()) {
             frames.pollFirstEntry()
             droppedFrames++
-            latePacketDrops++
+            overflowDrops++
         }
     }
 
     private fun bufferLevelLocked(): Int = frames.size * AudioProtocol.FRAME_DURATION_MS
+
+    private companion object {
+        const val DEFAULT_WAIT_MS = 5L
+    }
 }

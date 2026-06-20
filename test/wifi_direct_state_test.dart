@@ -80,6 +80,7 @@ void main() {
         'bitrateBps': '32000',
         'packetLossCount': 2.0,
         'latePacketDrops': '3',
+        'overflowDrops': 8,
         'plcCount': 4,
         'rtcpFractionLost': '5',
         'rtcpJitter': 6,
@@ -90,6 +91,7 @@ void main() {
       expect(stats.bitrateBps, 32000);
       expect(stats.packetLossCount, 2);
       expect(stats.latePacketDrops, 3);
+      expect(stats.overflowDrops, 8);
       expect(stats.plcCount, 4);
       expect(stats.rtcpFractionLost, 5);
       expect(stats.rtcpJitter, 6);
@@ -623,6 +625,7 @@ void main() {
           droppedFrames: 1,
           packetLossCount: 2,
           latePacketDrops: 3,
+          overflowDrops: 8,
           underflowCount: 2,
           plcCount: 4,
           rtcpFractionLost: 5,
@@ -639,6 +642,7 @@ void main() {
       expect(controller.currentState.audioStats.bufferLevelMs, 60);
       expect(controller.currentState.audioStats.packetLossCount, 2);
       expect(controller.currentState.audioStats.latePacketDrops, 3);
+      expect(controller.currentState.audioStats.overflowDrops, 8);
       expect(controller.currentState.audioStats.plcCount, 4);
       expect(controller.currentState.audioStats.rtcpFractionLost, 5);
       expect(controller.currentState.audioStats.rtcpJitter, 6);
@@ -700,7 +704,7 @@ void main() {
       },
     );
 
-    test('audio start calls native service when supported', () async {
+    test('receive audio start does not pass local latency mode', () async {
       service.emit(
         SessionReadyEvent(
           sessionId: 'session-audio-ready',
@@ -730,6 +734,39 @@ void main() {
 
       expect(service.audioStartCalls, 1);
       expect(service.lastAudioMode, 'receive');
+      expect(service.lastAudioLatencyMode, isNull);
+    });
+
+    test('send audio start passes persisted latency mode', () async {
+      service.emit(
+        SessionReadyEvent(
+          sessionId: 'session-audio-ready',
+          role: 'client',
+          protocolVersion: 2,
+          capabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
+          peerCapabilities: const [
+            'audio.link',
+            'audio.codec.opus',
+            'audio.transport.rtp',
+            'audio.rtcp',
+            'audio.codec.libopus',
+          ],
+        ),
+      );
+      await pumpEventQueue();
+
+      await controller.setAudioLatencyMode('stable');
+      await controller.startAudio(mode: 'send');
+      await pumpEventQueue();
+
+      expect(service.audioStartCalls, 1);
+      expect(service.lastAudioMode, 'send');
       expect(service.lastAudioLatencyMode, 'stable');
     });
 
@@ -774,7 +811,8 @@ void main() {
           'droppedFrames': 0,
           'packetLossCount': '4',
           'latePacketDrops': 5.0,
-          'plcCount': '6',
+          'overflowDrops': '6',
+          'plcCount': '7',
           'rtcpFractionLost': 7,
           'rtcpJitter': '8',
           'roundTripMs': 9,
@@ -791,7 +829,8 @@ void main() {
         expect(stats.underflowCount, 3);
         expect(stats.packetLossCount, 4);
         expect(stats.latePacketDrops, 5);
-        expect(stats.plcCount, 6);
+        expect(stats.overflowDrops, 6);
+        expect(stats.plcCount, 7);
         expect(stats.rtcpFractionLost, 7);
         expect(stats.rtcpJitter, 8);
         expect(stats.roundTripMs, 9);
@@ -948,7 +987,7 @@ class _FakeWiFiDirectService extends WiFiDirectService {
     required String mode,
     String source = 'microphone',
     String encoding = 'opus',
-    String latencyMode = 'lowLatency',
+    String? latencyMode,
   }) async {
     audioStartCalls++;
     lastAudioMode = mode;

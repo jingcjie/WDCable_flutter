@@ -558,6 +558,7 @@
   "audioDropped": "Dropped",
   "audioPacketLoss": "Packet Loss",
   "audioLateDrops": "Late Drops",
+  "audioOverflowDrops": "Overflow Drops",
   "audioPlc": "PLC",
   "audioRtcpLoss": "RTCP Loss",
   "audioRtcpJitter": "RTCP Jitter",

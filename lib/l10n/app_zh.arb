@@ -139,6 +139,7 @@
   "audioDropped": "\u4e22\u5e27",
   "audioPacketLoss": "\u4e22\u5305",
   "audioLateDrops": "\u8fdf\u5230\u4e22\u5305",
+  "audioOverflowDrops": "\u6ea2\u51fa\u4e22\u5305",
   "audioPlc": "\u4e22\u5305\u8865\u507f",
   "audioRtcpLoss": "RTCP \u4e22\u5305",
   "audioRtcpJitter": "RTCP \u6296\u52a8",

@@ -920,6 +920,12 @@ abstract class AppLocalizations {
   /// **'Late Drops'**
   String get audioLateDrops;
 
+  /// No description provided for @audioOverflowDrops.
+  ///
+  /// In en, this message translates to:
+  /// **'Overflow Drops'**
+  String get audioOverflowDrops;
+
   /// No description provided for @audioPlc.
   ///
   /// In en, this message translates to:

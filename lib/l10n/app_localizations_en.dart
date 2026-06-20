@@ -462,6 +462,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioLateDrops => 'Late Drops';
 
   @override
+  String get audioOverflowDrops => 'Overflow Drops';
+
+  @override
   String get audioPlc => 'PLC';
 
   @override

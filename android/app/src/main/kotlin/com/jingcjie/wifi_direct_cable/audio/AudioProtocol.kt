@@ -56,7 +56,9 @@ object AudioProtocol {
         streamId: Long,
         offerId: String,
         rtpSsrc: Long,
-        transportRole: SessionTransportRole
+        transportRole: SessionTransportRole,
+        latencyMode: String = LATENCY_LOW,
+        bitrateBps: Int = BITRATE_BPS
     ): JSONObject = base(KIND_OFFER, streamId)
         .put("offerId", offerId)
         .put("transport", TRANSPORT_RTP_UDP)
@@ -66,7 +68,8 @@ object AudioProtocol {
         .put("sampleRate", SAMPLE_RATE)
         .put("channels", CHANNELS)
         .put("frameDurationMs", FRAME_DURATION_MS)
-        .put("bitrateBps", BITRATE_BPS)
+        .put("latencyMode", latencyMode)
+        .put("bitrateBps", bitrateBps)
         .put("rtpPayloadType", RTP_PAYLOAD_TYPE)
         .put("rtpClockRate", RTP_CLOCK_RATE)
         .put("rtpSsrc", rtpSsrc)
@@ -77,7 +80,9 @@ object AudioProtocol {
         offerId: String,
         rtpSsrc: Long,
         transportRole: SessionTransportRole,
-        receiverProbeRequired: Boolean
+        receiverProbeRequired: Boolean,
+        latencyMode: String,
+        bitrateBps: Int
     ): JSONObject = base(KIND_ACCEPT, streamId)
         .put("offerId", offerId)
         .put("transport", TRANSPORT_RTP_UDP)
@@ -86,7 +91,8 @@ object AudioProtocol {
         .put("sampleRate", SAMPLE_RATE)
         .put("channels", CHANNELS)
         .put("frameDurationMs", FRAME_DURATION_MS)
-        .put("bitrateBps", BITRATE_BPS)
+        .put("latencyMode", latencyMode)
+        .put("bitrateBps", bitrateBps)
         .put("rtpPayloadType", RTP_PAYLOAD_TYPE)
         .put("rtpClockRate", RTP_CLOCK_RATE)
         .put("rtpSsrc", rtpSsrc)
@@ -112,6 +118,7 @@ object AudioProtocol {
             sampleRate = requiredInt(metadata, "sampleRate"),
             channels = requiredInt(metadata, "channels"),
             frameDurationMs = requiredInt(metadata, "frameDurationMs"),
+            latencyMode = requiredString(metadata, "latencyMode"),
             bitrateBps = requiredInt(metadata, "bitrateBps"),
             rtpPayloadType = requiredInt(metadata, "rtpPayloadType"),
             rtpClockRate = requiredInt(metadata, "rtpClockRate"),
@@ -131,6 +138,7 @@ object AudioProtocol {
             sampleRate = requiredInt(metadata, "sampleRate"),
             channels = requiredInt(metadata, "channels"),
             frameDurationMs = requiredInt(metadata, "frameDurationMs"),
+            latencyMode = requiredString(metadata, "latencyMode"),
             bitrateBps = requiredInt(metadata, "bitrateBps"),
             rtpPayloadType = requiredInt(metadata, "rtpPayloadType"),
             rtpClockRate = requiredInt(metadata, "rtpClockRate"),
@@ -157,6 +165,8 @@ object AudioProtocol {
             offer.sampleRate == SAMPLE_RATE &&
             offer.channels == CHANNELS &&
             offer.frameDurationMs == FRAME_DURATION_MS &&
+            isSupportedLatencyMode(offer.latencyMode) &&
+            isSupportedBitrateBps(offer.bitrateBps) &&
             offer.rtpPayloadType == RTP_PAYLOAD_TYPE &&
             offer.rtpClockRate == RTP_CLOCK_RATE
     }
@@ -168,8 +178,18 @@ object AudioProtocol {
             accept.sampleRate == SAMPLE_RATE &&
             accept.channels == CHANNELS &&
             accept.frameDurationMs == FRAME_DURATION_MS &&
+            isSupportedLatencyMode(accept.latencyMode) &&
+            isSupportedBitrateBps(accept.bitrateBps) &&
             accept.rtpPayloadType == RTP_PAYLOAD_TYPE &&
             accept.rtpClockRate == RTP_CLOCK_RATE
+    }
+
+    fun isSupportedLatencyMode(value: String): Boolean {
+        return value == LATENCY_LOW || value == LATENCY_STABLE
+    }
+
+    fun isSupportedBitrateBps(value: Int): Boolean {
+        return value == BITRATE_BPS
     }
 
     fun receiverProbeRequired(receiverRole: SessionTransportRole): Boolean {
@@ -234,6 +254,7 @@ data class AudioOffer(
     val sampleRate: Int,
     val channels: Int,
     val frameDurationMs: Int,
+    val latencyMode: String,
     val bitrateBps: Int,
     val rtpPayloadType: Int,
     val rtpClockRate: Int,
@@ -250,6 +271,7 @@ data class AudioAccept(
     val sampleRate: Int,
     val channels: Int,
     val frameDurationMs: Int,
+    val latencyMode: String,
     val bitrateBps: Int,
     val rtpPayloadType: Int,
     val rtpClockRate: Int,
