@@ -488,6 +488,40 @@ void main() {
       expect(controller.currentState.pendingPeerAddress, isNull);
     });
 
+    test('permission grant state clears stale permission error', () async {
+      service.emit(PermissionDeniedEvent(const ['Nearby Wi-Fi devices']));
+      await pumpEventQueue();
+
+      expect(
+        controller.currentState.nativeWifiDirectState,
+        'BlockedByPermission',
+      );
+      expect(
+        controller.currentState.lastNativeError,
+        contains('Permission denied'),
+      );
+
+      service.emit(
+        NativeStateChangedEvent({
+          'state': 'Ready',
+          'opId': 1,
+          'p2pStateKnown': true,
+          'p2pEnabled': true,
+          'isDiscovering': false,
+          'discoveryState': 'stopped',
+          'isListening': false,
+          'listenState': 'unknown',
+          'serviceRegistered': false,
+          'callback': 'permission_result',
+        }),
+      );
+      await pumpEventQueue();
+
+      expect(controller.currentState.nativeWifiDirectState, 'Ready');
+      expect(controller.currentState.isWifiP2pEnabled, isTrue);
+      expect(controller.currentState.lastNativeError, isNull);
+    });
+
     test('discovery state follows native discovery events', () async {
       await controller.discoverPeers();
       await pumpEventQueue();

@@ -412,6 +412,7 @@ class WiFiDirectController {
   }
 
   WiFiDirectState _stateFromNativeEvent(NativeStateChangedEvent event) {
+    final previousState = _currentState.nativeWifiDirectState;
     var nextState = _currentState.copyWith(
       nativeWifiDirectState: event.state,
       operationId: event.operationId,
@@ -472,6 +473,12 @@ class WiFiDirectController {
     }
 
     if (event.state == 'Connected') {
+      nextState = nextState.copyWith(lastNativeError: null);
+    }
+
+    if (previousState == 'BlockedByPermission' &&
+        event.state != 'BlockedByPermission' &&
+        event.state != 'Error') {
       nextState = nextState.copyWith(lastNativeError: null);
     }
 
