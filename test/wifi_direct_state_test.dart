@@ -25,14 +25,17 @@ void main() {
           timestamp: DateTime(2026),
           status: 'Completed',
         ),
-        currentFileTransfer: FileTransferInfo(
-          fileName: 'sample.txt',
-          fileSize: 10,
-          progress: 0.5,
-          isUploading: false,
-          isCompleted: false,
-          timestamp: DateTime(2026),
-        ),
+        activeFileTransfers: {
+          'transfer-1': FileTransferInfo(
+            transferId: 'transfer-1',
+            fileName: 'sample.txt',
+            fileSize: 10,
+            bytesTransferred: 5,
+            progress: 0.5,
+            isUploading: false,
+            timestamp: DateTime(2026),
+          ),
+        },
         audioStreamId: 12,
         audioLastError: 'old error',
       );
@@ -42,7 +45,7 @@ void main() {
         pendingPeerAddress: null,
         connectionInfo: null,
         lastSpeedTest: null,
-        currentFileTransfer: null,
+        activeFileTransfers: const {},
         audioStreamId: null,
         audioLastError: null,
       );
@@ -51,7 +54,7 @@ void main() {
       expect(cleared.pendingPeerAddress, isNull);
       expect(cleared.connectionInfo, isNull);
       expect(cleared.lastSpeedTest, isNull);
-      expect(cleared.currentFileTransfer, isNull);
+      expect(cleared.activeFileTransfers, isEmpty);
       expect(cleared.audioStreamId, isNull);
       expect(cleared.audioLastError, isNull);
     });
@@ -155,28 +158,34 @@ void main() {
     });
 
     test(
-      'moves received file transfer from current to recent when complete',
+      'moves received file transfer from active to recent when complete',
       () async {
-        service.emit(FileReceiveStartedEvent('sample.txt', 128));
+        service.emit(_receiveStarted('transfer-1', 'sample.txt', 128));
         await pumpEventQueue();
 
         expect(
-          controller.currentState.currentFileTransfer?.fileName,
+          controller.currentState.activeFileTransfers['transfer-1']?.fileName,
           'sample.txt',
         );
-        expect(controller.currentState.currentFileTransfer?.progress, 0.0);
+        expect(
+          controller.currentState.activeFileTransfers['transfer-1']?.progress,
+          0.0,
+        );
 
-        service.emit(FileReceiveProgressEvent('sample.txt', 0.75));
+        service.emit(_receiveProgress('transfer-1', 'sample.txt', 128, 96));
         await pumpEventQueue();
 
-        expect(controller.currentState.currentFileTransfer?.progress, 0.75);
+        expect(
+          controller.currentState.activeFileTransfers['transfer-1']?.progress,
+          0.75,
+        );
 
         service.emit(
-          FileReceivedEvent('sample.txt', filePath: '/tmp/sample.txt'),
+          _receiveCompleted('transfer-1', 'sample.txt', 128, '/tmp/sample.txt'),
         );
         await pumpEventQueue();
 
-        expect(controller.currentState.currentFileTransfer, isNull);
+        expect(controller.currentState.activeFileTransfers, isEmpty);
         expect(controller.currentState.recentFileTransfers, hasLength(1));
         expect(
           controller.currentState.recentFileTransfers.first.fileName,
@@ -271,14 +280,14 @@ void main() {
           ),
         ),
       );
-      service.emit(FileReceiveStartedEvent('sample.txt', 128));
+      service.emit(_receiveStarted('reset-transfer', 'sample.txt', 128));
       await pumpEventQueue();
 
       expect(controller.currentState.peers, isNotEmpty);
       expect(controller.currentState.connectionInfo?.isConnected, isTrue);
       expect(controller.currentState.sessionState, 'WifiDirectConnected');
       expect(controller.currentState.isServerStarted, isFalse);
-      expect(controller.currentState.currentFileTransfer, isNotNull);
+      expect(controller.currentState.activeFileTransfers, isNotEmpty);
 
       await controller.resetWifiDirectSettings();
       await pumpEventQueue();
@@ -290,7 +299,7 @@ void main() {
       expect(controller.currentState.pendingPeerAddress, isNull);
       expect(controller.currentState.isSpeedTesting, isFalse);
       expect(controller.currentState.lastSpeedTest, isNull);
-      expect(controller.currentState.currentFileTransfer, isNull);
+      expect(controller.currentState.activeFileTransfers, isEmpty);
     });
 
     test('disconnect clears active transfer and audio state', () async {
@@ -303,7 +312,7 @@ void main() {
           ),
         ),
       );
-      service.emit(FileReceiveStartedEvent('sample.txt', 128));
+      service.emit(_receiveStarted('disconnect-transfer', 'sample.txt', 128));
       service.emit(
         AudioStateChangedEvent(
           mode: 'receive',
@@ -318,7 +327,7 @@ void main() {
       );
       await pumpEventQueue();
 
-      expect(controller.currentState.currentFileTransfer, isNotNull);
+      expect(controller.currentState.activeFileTransfers, isNotEmpty);
       expect(controller.currentState.audioState, 'streaming');
 
       service.emit(
@@ -334,7 +343,7 @@ void main() {
 
       expect(controller.currentState.connectionInfo, isNull);
       expect(controller.currentState.sessionState, 'Disconnected');
-      expect(controller.currentState.currentFileTransfer, isNull);
+      expect(controller.currentState.activeFileTransfers, isEmpty);
       expect(controller.currentState.audioState, 'idle');
       expect(controller.currentState.audioStreamId, isNull);
     });
@@ -428,7 +437,7 @@ void main() {
             ],
           ),
         );
-        service.emit(FileReceiveStartedEvent('active.bin', 256));
+        service.emit(_receiveStarted('failed-transfer', 'active.bin', 256));
         service.emit(
           AudioStateChangedEvent(
             mode: 'send',
@@ -444,7 +453,7 @@ void main() {
         await pumpEventQueue();
 
         expect(controller.currentState.isSessionReady, isTrue);
-        expect(controller.currentState.currentFileTransfer, isNotNull);
+        expect(controller.currentState.activeFileTransfers, isNotEmpty);
         expect(controller.currentState.audioState, 'streaming');
 
         service.emit(
@@ -458,7 +467,7 @@ void main() {
 
         expect(controller.currentState.sessionState, 'Failed');
         expect(controller.currentState.isSessionReady, isFalse);
-        expect(controller.currentState.currentFileTransfer, isNull);
+        expect(controller.currentState.activeFileTransfers, isEmpty);
         expect(controller.currentState.isSpeedTesting, isFalse);
         expect(controller.currentState.audioState, 'idle');
         expect(controller.currentState.audioStreamId, isNull);
@@ -938,16 +947,26 @@ void main() {
     });
 
     test('ignores duplicate file received completion events', () async {
-      service.emit(FileReceiveStartedEvent('sample.txt', 128));
+      service.emit(_receiveStarted('duplicate-transfer', 'sample.txt', 128));
       service.emit(
-        FileReceivedEvent('sample.txt', filePath: '/tmp/sample.txt'),
+        _receiveCompleted(
+          'duplicate-transfer',
+          'sample.txt',
+          128,
+          '/tmp/sample.txt',
+        ),
       );
       await pumpEventQueue();
 
       expect(controller.currentState.recentFileTransfers, hasLength(1));
 
       service.emit(
-        FileReceivedEvent('sample.txt', filePath: '/tmp/sample.txt'),
+        _receiveCompleted(
+          'duplicate-transfer',
+          'sample.txt',
+          128,
+          '/tmp/sample.txt',
+        ),
       );
       await pumpEventQueue();
 
@@ -957,9 +976,148 @@ void main() {
         '/tmp/sample.txt',
       );
     });
+
+    test(
+      'tracks duplicate filenames by transfer ID and ignores late progress',
+      () async {
+        service.emit(
+          SessionReadyEvent(
+            sessionId: 'file-session',
+            role: 'client',
+            protocolVersion: 2,
+            capabilities: const ['bulk.file'],
+            peerCapabilities: const ['bulk.file'],
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(
+          await controller.sendFile('/tmp/a.txt', fileName: 'same.txt'),
+          isTrue,
+        );
+        expect(
+          await controller.sendFile('/tmp/b.txt', fileName: 'same.txt'),
+          isTrue,
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.activeFileTransfers, hasLength(2));
+        expect(service.startedTransferIds, hasLength(2));
+        final firstId = service.startedTransferIds.first;
+        final secondId = service.startedTransferIds.last;
+        expect(firstId, isNot(secondId));
+
+        service.emit(
+          FileTransferStartedEvent(
+            transferId: firstId,
+            fileName: 'same.txt',
+            fileSize: 100,
+            bytesTransferred: 0,
+            isUploading: true,
+          ),
+        );
+        service.emit(
+          FileTransferStartedEvent(
+            transferId: secondId,
+            fileName: 'same.txt',
+            fileSize: 200,
+            bytesTransferred: 0,
+            isUploading: true,
+          ),
+        );
+        await pumpEventQueue();
+
+        await controller.cancelFileTransfer(firstId);
+        expect(service.cancelledTransferIds, [firstId]);
+        expect(
+          controller.currentState.activeFileTransfers[firstId]?.status,
+          FileTransferStatus.cancelling,
+        );
+
+        service.emit(
+          FileTransferCancelledEvent(
+            transferId: firstId,
+            fileName: 'same.txt',
+            fileSize: 100,
+            bytesTransferred: 25,
+            isUploading: true,
+            error: 'user_cancelled',
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.activeFileTransfers, hasLength(1));
+        expect(
+          controller.currentState.recentFileTransfers.first.status,
+          FileTransferStatus.cancelled,
+        );
+
+        service.emit(
+          FileTransferProgressEvent(
+            transferId: firstId,
+            fileName: 'same.txt',
+            fileSize: 100,
+            bytesTransferred: 90,
+            isUploading: true,
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(controller.currentState.activeFileTransfers, hasLength(1));
+        expect(
+          controller.currentState.recentFileTransfers.first.bytesTransferred,
+          25,
+        );
+      },
+    );
+
+    test(
+      'persists receive destination state through service methods',
+      () async {
+        expect(controller.currentState.receiveDestination.mode, 'app');
+
+        expect(await controller.setReceiveDestination('downloads'), isTrue);
+        expect(controller.currentState.receiveDestination.mode, 'downloads');
+
+        expect(await controller.pickCustomReceiveDestination(), isTrue);
+        expect(controller.currentState.receiveDestination.mode, 'custom');
+        expect(
+          controller.currentState.receiveDestination.displayName,
+          'Chosen folder',
+        );
+      },
+    );
   });
 
   group('WiFiDirectService bridge parsing', () {
+    test('parses unified file transfer events by transfer ID', () async {
+      final service = WiFiDirectService();
+      final events = <WiFiDirectEvent>[];
+      final subscription = service.eventStream.listen(events.add);
+
+      await _invokePlatformEvent('onFileTransferProgress', <String, Object?>{
+        'transferId': 'transfer-42',
+        'direction': 'receive',
+        'fileName': 'sample.bin',
+        'fileSize': '100',
+        'bytesTransferred': 25.0,
+        'status': 'transferring',
+        'savedLocation': 'Downloads',
+      });
+      await pumpEventQueue();
+
+      final event = events.single as FileTransferProgressEvent;
+      expect(event.transferId, 'transfer-42');
+      expect(event.fileSize, 100);
+      expect(event.bytesTransferred, 25);
+      expect(event.progress, 0.25);
+      expect(event.isUploading, isFalse);
+      expect(event.savedLocation, 'Downloads');
+
+      await subscription.cancel();
+      service.dispose();
+    });
+
     test(
       'emits typed events from platform method calls with coercion',
       () async {
@@ -1029,6 +1187,51 @@ void main() {
   });
 }
 
+FileTransferStartedEvent _receiveStarted(
+  String transferId,
+  String fileName,
+  int fileSize,
+) {
+  return FileTransferStartedEvent(
+    transferId: transferId,
+    fileName: fileName,
+    fileSize: fileSize,
+    bytesTransferred: 0,
+    isUploading: false,
+  );
+}
+
+FileTransferProgressEvent _receiveProgress(
+  String transferId,
+  String fileName,
+  int fileSize,
+  int bytesTransferred,
+) {
+  return FileTransferProgressEvent(
+    transferId: transferId,
+    fileName: fileName,
+    fileSize: fileSize,
+    bytesTransferred: bytesTransferred,
+    isUploading: false,
+  );
+}
+
+FileTransferCompletedEvent _receiveCompleted(
+  String transferId,
+  String fileName,
+  int fileSize,
+  String filePath,
+) {
+  return FileTransferCompletedEvent(
+    transferId: transferId,
+    fileName: fileName,
+    fileSize: fileSize,
+    bytesTransferred: fileSize,
+    isUploading: false,
+    filePath: filePath,
+  );
+}
+
 Future<void> _invokePlatformEvent(String method, Object? arguments) async {
   final binding = TestDefaultBinaryMessengerBinding.instance;
   const codec = StandardMethodCodec();
@@ -1055,6 +1258,8 @@ class _FakeWiFiDirectService extends WiFiDirectService {
   String? lastAudioLatencyMode;
   String? lastAudioQualityMode;
   final List<String> sentMessages = [];
+  final List<String> startedTransferIds = [];
+  final List<String> cancelledTransferIds = [];
 
   @override
   Stream<WiFiDirectEvent> get eventStream => _events.stream;
@@ -1125,6 +1330,42 @@ class _FakeWiFiDirectService extends WiFiDirectService {
 
   @override
   Future<String> disconnect() async => 'Disconnected';
+
+  @override
+  Future<void> startFileTransfer({
+    required String transferId,
+    required String filePath,
+    required String fileName,
+  }) async {
+    startedTransferIds.add(transferId);
+  }
+
+  @override
+  Future<void> cancelFileTransfer(String transferId) async {
+    cancelledTransferIds.add(transferId);
+  }
+
+  @override
+  Future<ReceiveDestinationInfo> getReceiveDestination() async {
+    return const ReceiveDestinationInfo();
+  }
+
+  @override
+  Future<ReceiveDestinationInfo> setReceiveDestination(String mode) async {
+    return ReceiveDestinationInfo(
+      mode: mode,
+      displayName: mode == 'downloads' ? 'Downloads' : 'App storage',
+    );
+  }
+
+  @override
+  Future<ReceiveDestinationInfo?> pickCustomReceiveDestination() async {
+    return const ReceiveDestinationInfo(
+      mode: 'custom',
+      displayName: 'Chosen folder',
+      uri: 'content://folder',
+    );
+  }
 
   @override
   Future<String> resetWifiDirectSettings() async {

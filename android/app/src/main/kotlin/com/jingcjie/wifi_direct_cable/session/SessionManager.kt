@@ -1,10 +1,11 @@
 package com.jingcjie.wifi_direct_cable.session
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import com.jingcjie.wifi_direct_cable.ReceiveDestinationManager
 import com.jingcjie.wifi_direct_cable.WdCableRuntime
 import com.jingcjie.wifi_direct_cable.audio.AudioCapabilities
 import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
@@ -94,6 +95,10 @@ class SessionManager(
     private val activeSpeedReceives = ConcurrentHashMap<Long, IncomingSpeedStream>()
     private val speedTestActive = AtomicBoolean(false)
     private val bulkSendLock = Any()
+    private val receiveDestinationManager = ReceiveDestinationManager(context, methodChannel)
+
+    @Volatile
+    private var fileTransferCleanup: ((String) -> Unit)? = null
 
     @Volatile
     private var audioHandler: AudioSessionHandler? = null
@@ -153,6 +158,7 @@ class SessionManager(
         val sessionId = UUID.randomUUID().toString()
         val newGeneration = generation.incrementAndGet()
         audioHandler?.onSessionEnded("wifi_direct_reconnected")
+        fileTransferCleanup?.invoke("wifi_direct_reconnected")
         closeRuntimeOnly()
         transportAdapter.cancel()
         stopHeartbeat()
@@ -192,6 +198,7 @@ class SessionManager(
         transitionForCleanup(SessionPhase.DISCONNECTING, sessionId, role, reason)
         audioHandler?.onSessionEnded(reason)
         stopHeartbeat()
+        fileTransferCleanup?.invoke(reason)
         closeRuntimeOnly()
         transportAdapter.cancel()
         runtime = null
@@ -214,13 +221,27 @@ class SessionManager(
         heartbeatExecutor.shutdownNow()
     }
 
-    fun configureTransportSettings(bufferSize: Int, timeout: Int, keepAlive: Boolean) {
-        methodChannel.invokeOnMain("onDebug", "Transport settings received: bufferSize=$bufferSize timeout=$timeout keepAlive=$keepAlive")
-    }
-
     fun registerAudioHandler(handler: AudioSessionHandler) {
         audioHandler = handler
     }
+
+    fun registerFileTransferCleanup(callback: (String) -> Unit) {
+        fileTransferCleanup = callback
+    }
+
+    fun isReady(): Boolean = runtime != null && stateMachine.phase == SessionPhase.READY
+
+    fun getReceiveDestination(): ReceiveDestinationManager.Destination =
+        receiveDestinationManager.current()
+
+    fun setReceiveDestination(mode: String): ReceiveDestinationManager.Destination =
+        receiveDestinationManager.setMode(mode)
+
+    fun saveCustomReceiveDestination(
+        uri: Uri,
+        displayName: String
+    ): ReceiveDestinationManager.Destination =
+        receiveDestinationManager.saveCustomFolder(uri, displayName)
 
     fun clearSpeedTestState() {
         speedTestActive.set(false)
@@ -288,39 +309,26 @@ class SessionManager(
     }
 
     fun sendFileStream(
+        transferId: String,
         fileName: String,
         sizeBytes: Long,
         inputStream: InputStream,
-        result: MethodChannel.Result
-    ) {
-        val activeRuntime = readyRuntimeOrError(result) ?: run {
-            inputStream.close()
-            return
+        shouldCancel: () -> Boolean,
+        onProgress: (Long) -> Unit
+    ): FileSendResult {
+        val activeRuntime = runtime
+        if (activeRuntime == null || stateMachine.phase != SessionPhase.READY) {
+            throw IOException("The WDCable session is not ready")
         }
-        ioExecutor.execute {
-            inputStream.use { stream ->
-                try {
-                    sendFileStreamInternal(activeRuntime, fileName, sizeBytes, stream)
-                    mainHandler.post {
-                        result.success("File sent")
-                    }
-                } catch (exception: Exception) {
-                    DiagnosticsLogger.log(
-                        "file",
-                        "File send failed",
-                        mapOf(
-                            "sessionId" to activeRuntime.sessionId,
-                            "fileName" to fileName,
-                            "error" to exception.message
-                        )
-                    )
-                    methodChannel.invokeOnMain("onError", "File send failed: ${exception.message}")
-                    mainHandler.post {
-                        result.error("SEND_FAILED", "Failed to send file: ${exception.message}", null)
-                    }
-                }
-            }
-        }
+        return sendFileStreamInternal(
+            activeRuntime = activeRuntime,
+            transferId = transferId,
+            fileName = fileName,
+            sizeBytes = sizeBytes,
+            inputStream = inputStream,
+            shouldCancel = shouldCancel,
+            onProgress = onProgress
+        )
     }
 
     fun requestSpeedTestData(sizeBytes: Long, result: MethodChannel.Result) {
@@ -799,21 +807,33 @@ class SessionManager(
         val transferId = metadata.optString("transferId", UUID.randomUUID().toString())
         val fileName = metadata.optString("fileName", "unknown_file")
         val expectedSize = metadata.optLong("sizeBytes", -1L)
-        val targetFile = duplicateSafeFile(safeFileName(fileName))
+        activeFileReceives.remove(frame.streamId)?.let { existing ->
+            closeQuietly(existing.outputStream)
+            existing.file.delete()
+            emitFileTransferTerminal(
+                method = "onFileTransferFailed",
+                incoming = existing,
+                status = "failed",
+                error = "Duplicate transfer start for the same stream"
+            )
+        }
+        val safeName = safeFileName(fileName)
+        val partialFile = receiveDestinationManager.createPartialFile(transferId)
+        partialFile.delete()
         val incoming = IncomingFileStream(
             transferId = transferId,
             fileName = fileName,
-            safeFileName = targetFile.name,
+            safeFileName = safeName,
             expectedSize = expectedSize,
-            file = targetFile,
-            outputStream = FileOutputStream(targetFile),
+            file = partialFile,
+            outputStream = FileOutputStream(partialFile),
             digest = MessageDigest.getInstance("SHA-256"),
             startedAtMs = System.currentTimeMillis()
         )
         activeFileReceives[frame.streamId] = incoming
         methodChannel.invokeOnMain(
-            "onFileReceiveStarted",
-            mapOf("fileName" to incoming.safeFileName, "fileSize" to expectedSize)
+            "onFileTransferStarted",
+            fileTransferData(incoming, status = "transferring")
         )
         DiagnosticsLogger.log(
             "file",
@@ -827,14 +847,9 @@ class SessionManager(
             incoming.outputStream.write(frame.payload)
             incoming.digest.update(frame.payload)
             incoming.bytesReceived += frame.payload.size
-            val progress = if (incoming.expectedSize > 0) {
-                (incoming.bytesReceived.toDouble() / incoming.expectedSize.toDouble()).coerceIn(0.0, 1.0)
-            } else {
-                0.0
-            }
             methodChannel.invokeOnMain(
-                "onFileReceiveProgress",
-                mapOf("fileName" to incoming.safeFileName, "progress" to progress)
+                "onFileTransferProgress",
+                fileTransferData(incoming, status = "transferring")
             )
             return
         }
@@ -910,18 +925,33 @@ class SessionManager(
             incoming.outputStream.flush()
             incoming.outputStream.close()
             val actualHash = incoming.digest.digest().toHex()
+            val expectedSize = metadata.optLong("sizeBytes", incoming.expectedSize)
+            if (expectedSize >= 0 && incoming.bytesReceived != expectedSize) {
+                incoming.file.delete()
+                throw IOException(
+                    "Size mismatch for ${incoming.safeFileName}: " +
+                        "expected $expectedSize bytes, received ${incoming.bytesReceived}"
+                )
+            }
             val expectedHash = metadata.optString("sha256", "")
             if (expectedHash.isNotBlank() && !expectedHash.equals(actualHash, ignoreCase = true)) {
                 incoming.file.delete()
                 throw IOException("Checksum mismatch for ${incoming.safeFileName}")
             }
-            methodChannel.invokeOnMain(
-                "onFileReceiveProgress",
-                mapOf("fileName" to incoming.safeFileName, "progress" to 1.0)
+            val published = receiveDestinationManager.publish(
+                incoming.file,
+                incoming.safeFileName
             )
             methodChannel.invokeOnMain(
-                "onFileReceived",
-                mapOf("fileName" to incoming.safeFileName, "filePath" to incoming.file.absolutePath)
+                "onFileTransferCompleted",
+                fileTransferData(
+                    incoming = incoming,
+                    status = "completed",
+                    fileName = published.displayName,
+                    fileSize = expectedSize.coerceAtLeast(incoming.bytesReceived),
+                    filePath = published.location,
+                    savedLocation = published.savedLocation
+                )
             )
             DiagnosticsLogger.log(
                 "file",
@@ -936,8 +966,14 @@ class SessionManager(
             )
             sendAck(activeRuntime, frame, "bulk.complete")
         } catch (exception: Exception) {
+            incoming.file.delete()
             sendBulkError(activeRuntime, frame.streamId, "file_receive_failed", exception.message ?: "File receive failed")
-            methodChannel.invokeOnMain("onError", "File receive failed: ${exception.message}")
+            emitFileTransferTerminal(
+                method = "onFileTransferFailed",
+                incoming = incoming,
+                status = "failed",
+                error = exception.message ?: "File receive failed"
+            )
         }
     }
 
@@ -945,6 +981,19 @@ class SessionManager(
         activeFileReceives.remove(frame.streamId)?.let { incoming ->
             closeQuietly(incoming.outputStream)
             incoming.file.delete()
+            val reason = metadata.optString("reason", "peer_cancelled")
+            val failed = reason.contains("failed", ignoreCase = true) ||
+                reason.contains("error", ignoreCase = true)
+            emitFileTransferTerminal(
+                method = if (failed) {
+                    "onFileTransferFailed"
+                } else {
+                    "onFileTransferCancelled"
+                },
+                incoming = incoming,
+                status = if (failed) "failed" else "cancelled",
+                error = reason
+            )
         }
         activeSpeedReceives.remove(frame.streamId)
         speedTestActive.set(false)
@@ -1089,102 +1138,168 @@ class SessionManager(
 
     private fun sendFileStreamInternal(
         activeRuntime: Runtime,
+        transferId: String,
         fileName: String,
         sizeBytes: Long,
-        inputStream: InputStream
-    ) {
-        val transferId = UUID.randomUUID().toString()
+        inputStream: InputStream,
+        shouldCancel: () -> Boolean,
+        onProgress: (Long) -> Unit
+    ): FileSendResult {
         val streamId = nextStreamId()
+        val correlationId = UUID.nameUUIDFromBytes(transferId.toByteArray(Charsets.UTF_8))
         val digest = MessageDigest.getInstance("SHA-256")
         var bytesSent = 0L
         val startedAtMs = System.currentTimeMillis()
         val safeName = safeFileName(fileName)
+        val cancellationState = BulkTransferCancellationState(shouldCancel)
 
         synchronized(bulkSendLock) {
-            activeRuntime.bulkTransport.writeFrame(
-                ProtocolFrame(
-                    type = ProtocolFrameType.BULK_START,
-                    channel = ProtocolChannel.BULK,
-                    streamId = streamId,
-                    sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
-                    correlationId = UUID.fromString(transferId),
-                    metadataJson = JSONObject()
-                        .put("kind", "file")
-                        .put("transferId", transferId)
-                        .put("sessionId", activeRuntime.sessionId)
-                        .put("fileName", safeName)
-                        .put("sizeBytes", sizeBytes)
-                        .put("timestamp", startedAtMs)
-                        .toString()
-                )
-            )
-
-            val buffer = ByteArray(BULK_CHUNK_SIZE)
-            while (true) {
-                val read = inputStream.read(buffer)
-                if (read == -1) break
-                val payload = buffer.copyOf(read)
-                digest.update(payload)
-                bytesSent += read
+            try {
+                if (cancellationState.isCancellationRequested()) {
+                    throw FileTransferCancelledException(bytesSent)
+                }
                 activeRuntime.bulkTransport.writeFrame(
                     ProtocolFrame(
-                        type = ProtocolFrameType.BULK_CHUNK,
+                        type = ProtocolFrameType.BULK_START,
                         channel = ProtocolChannel.BULK,
                         streamId = streamId,
                         sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
-                        correlationId = UUID.fromString(transferId),
+                        correlationId = correlationId,
                         metadataJson = JSONObject()
                             .put("kind", "file")
                             .put("transferId", transferId)
-                            .put("offset", bytesSent - read)
-                            .toString(),
-                        payload = payload
+                            .put("sessionId", activeRuntime.sessionId)
+                            .put("fileName", safeName)
+                            .put("sizeBytes", sizeBytes)
+                            .put("timestamp", startedAtMs)
+                            .toString()
                     )
                 )
-                val progress = if (sizeBytes > 0) {
-                    (bytesSent.toDouble() / sizeBytes.toDouble()).coerceIn(0.0, 1.0)
-                } else {
-                    0.0
-                }
-                methodChannel.invokeOnMain(
-                    "onFileSendProgress",
-                    mapOf("fileName" to safeName, "progress" to progress)
-                )
-            }
+                cancellationState.markStartSent()
 
-            val sha256 = digest.digest().toHex()
+                val buffer = ByteArray(BULK_CHUNK_SIZE)
+                while (true) {
+                    if (cancellationState.isCancellationRequested()) {
+                        throw FileTransferCancelledException(bytesSent)
+                    }
+                    val read = try {
+                        inputStream.read(buffer)
+                    } catch (exception: Exception) {
+                        if (cancellationState.isCancellationRequested()) {
+                            throw FileTransferCancelledException(bytesSent, exception)
+                        }
+                        throw exception
+                    }
+                    if (read == -1) break
+                    val payload = buffer.copyOf(read)
+                    digest.update(payload)
+                    bytesSent += read
+                    activeRuntime.bulkTransport.writeFrame(
+                        ProtocolFrame(
+                            type = ProtocolFrameType.BULK_CHUNK,
+                            channel = ProtocolChannel.BULK,
+                            streamId = streamId,
+                            sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
+                            correlationId = correlationId,
+                            metadataJson = JSONObject()
+                                .put("kind", "file")
+                                .put("transferId", transferId)
+                                .put("offset", bytesSent - read)
+                                .toString(),
+                            payload = payload
+                        )
+                    )
+                    onProgress(bytesSent)
+                }
+
+                if (cancellationState.isCancellationRequested()) {
+                    throw FileTransferCancelledException(bytesSent)
+                }
+
+                val sha256 = digest.digest().toHex()
+                activeRuntime.bulkTransport.writeFrame(
+                    ProtocolFrame(
+                        type = ProtocolFrameType.BULK_COMPLETE,
+                        channel = ProtocolChannel.BULK,
+                        streamId = streamId,
+                        sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
+                        correlationId = correlationId,
+                        metadataJson = JSONObject()
+                            .put("kind", "file")
+                            .put("transferId", transferId)
+                            .put("sizeBytes", bytesSent)
+                            .put("sha256", sha256)
+                            .put("timestamp", System.currentTimeMillis())
+                            .toString()
+                    )
+                )
+                onProgress(bytesSent)
+                DiagnosticsLogger.log(
+                    "file",
+                    "File sent",
+                    mapOf(
+                        "sessionId" to activeRuntime.sessionId,
+                        "transferId" to transferId,
+                        "fileName" to safeName,
+                        "bytesSent" to bytesSent,
+                        "sha256" to sha256,
+                        "durationMs" to (System.currentTimeMillis() - startedAtMs)
+                    )
+                )
+                return FileSendResult(safeName, bytesSent)
+            } catch (exception: Exception) {
+                if (cancellationState.claimCancelFrame()) {
+                    trySendBulkCancel(
+                        activeRuntime = activeRuntime,
+                        streamId = streamId,
+                        transferId = transferId,
+                        correlationId = correlationId,
+                        reason = if (cancellationState.isCancellationRequested()) {
+                            "user_cancelled"
+                        } else {
+                            "file_send_failed"
+                        },
+                        message = exception.message ?: "File send stopped"
+                    )
+                }
+                if (
+                    exception is FileTransferCancelledException ||
+                    cancellationState.isCancellationRequested()
+                ) {
+                    throw FileTransferCancelledException(bytesSent, exception)
+                }
+                throw exception
+            }
+        }
+    }
+
+    private fun trySendBulkCancel(
+        activeRuntime: Runtime,
+        streamId: Long,
+        transferId: String,
+        correlationId: UUID,
+        reason: String,
+        message: String
+    ): Boolean {
+        return try {
             activeRuntime.bulkTransport.writeFrame(
                 ProtocolFrame(
-                    type = ProtocolFrameType.BULK_COMPLETE,
+                    type = ProtocolFrameType.BULK_CANCEL,
                     channel = ProtocolChannel.BULK,
                     streamId = streamId,
                     sequenceNumber = activeRuntime.sequenceNumber.incrementAndGet(),
-                    correlationId = UUID.fromString(transferId),
+                    correlationId = correlationId,
                     metadataJson = JSONObject()
                         .put("kind", "file")
                         .put("transferId", transferId)
-                        .put("sizeBytes", bytesSent)
-                        .put("sha256", sha256)
-                        .put("timestamp", System.currentTimeMillis())
+                        .put("reason", reason)
+                        .put("message", message)
                         .toString()
                 )
             )
-            methodChannel.invokeOnMain(
-                "onFileSendProgress",
-                mapOf("fileName" to safeName, "progress" to 1.0)
-            )
-            DiagnosticsLogger.log(
-                "file",
-                "File sent",
-                mapOf(
-                    "sessionId" to activeRuntime.sessionId,
-                    "transferId" to transferId,
-                    "fileName" to safeName,
-                    "bytesSent" to bytesSent,
-                    "sha256" to sha256,
-                    "durationMs" to (System.currentTimeMillis() - startedAtMs)
-                )
-            )
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -1397,10 +1512,36 @@ class SessionManager(
         activeSpeedReceives.clear()
     }
 
-    private fun duplicateSafeFile(safeFileName: String): File {
-        val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            ?: File(context.filesDir, "downloads")
-        return BulkFileNames.duplicateSafeFile(directory, safeFileName)
+    private fun fileTransferData(
+        incoming: IncomingFileStream,
+        status: String,
+        fileName: String = incoming.safeFileName,
+        fileSize: Long = incoming.expectedSize,
+        filePath: String? = null,
+        savedLocation: String? = null,
+        error: String? = null
+    ): Map<String, Any?> = mapOf(
+        "transferId" to incoming.transferId,
+        "direction" to "receive",
+        "fileName" to fileName,
+        "fileSize" to fileSize,
+        "bytesTransferred" to incoming.bytesReceived,
+        "status" to status,
+        "filePath" to filePath,
+        "savedLocation" to savedLocation,
+        "error" to error
+    )
+
+    private fun emitFileTransferTerminal(
+        method: String,
+        incoming: IncomingFileStream,
+        status: String,
+        error: String? = null
+    ) {
+        methodChannel.invokeOnMain(
+            method,
+            fileTransferData(incoming, status = status, error = error)
+        )
     }
 
     private fun safeFileName(fileName: String): String = BulkFileNames.safeFileName(fileName)
@@ -1485,6 +1626,7 @@ class SessionManager(
         stopHeartbeat()
         audioHandler?.onSessionEnded(reason)
         cleanupIncomingBulkStreams(deletePartialFiles = true)
+        fileTransferCleanup?.invoke(reason)
         speedTestActive.set(false)
         closeRuntimeOnly()
         transportAdapter.cancel()
@@ -1648,6 +1790,7 @@ class SessionManager(
         stopHeartbeat()
         audioHandler?.onSessionEnded(reason)
         cleanupIncomingBulkStreams(deletePartialFiles = true)
+        fileTransferCleanup?.invoke(reason)
         speedTestActive.set(false)
         closeRuntimeOnly()
         transportAdapter.cancel()
@@ -1808,3 +1951,13 @@ class SessionManager(
         private const val BULK_CHUNK_SIZE = 64 * 1024
     }
 }
+
+data class FileSendResult(
+    val fileName: String,
+    val bytesSent: Long
+)
+
+class FileTransferCancelledException(
+    val bytesTransferred: Long,
+    cause: Throwable? = null
+) : IOException("File transfer cancelled", cause)

@@ -154,8 +154,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get receiveFiles => 'Receive Files';
 
   @override
-  String get filesWillBeAutomaticallyReceived =>
-      'Files will be automatically received when sent by peer';
+  String filesWillBeAutomaticallyReceived(String location) {
+    return 'Files sent by the peer will be saved to $location';
+  }
+
+  @override
+  String get saveReceivedFilesTo => 'Save received files to';
+
+  @override
+  String get appStorage => 'App storage';
+
+  @override
+  String get downloadsFolder => 'Downloads';
+
+  @override
+  String get chooseCustomFolder => 'Choose custom folder';
+
+  @override
+  String get receiveDestinationFailed => 'Could not use that receive location';
+
+  @override
+  String fileReceived(String fileName) {
+    return 'File received: $fileName';
+  }
+
+  @override
+  String fileTransferCancelled(String fileName) {
+    return 'Transfer cancelled: $fileName';
+  }
+
+  @override
+  String fileTransferFailed(String fileName, String error) {
+    return 'Transfer failed for $fileName: $error';
+  }
+
+  @override
+  String get preparing => 'Preparing';
+
+  @override
+  String get queued => 'Queued';
+
+  @override
+  String get cancelling => 'Cancelling...';
+
+  @override
+  String get cancelled => 'Cancelled';
+
+  @override
+  String get failed => 'Failed';
+
+  @override
+  String get cancel => 'Cancel';
 
   @override
   String get noActiveTransfers => 'No Active Transfers';
@@ -196,6 +245,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String noSupportedAppToOpenFile(String fileName, String location) {
+    return 'There is no supported app to open $fileName. It’s saved in $location.';
+  }
+
+  @override
   String get systemLogs => 'System Logs';
 
   @override
@@ -204,15 +258,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get customizeYourWifiDirectExperience =>
       'Customize your WiFi Direct experience';
-
-  @override
-  String get transferSettings => 'Transfer Settings';
-
-  @override
-  String get transferTimeout => 'Transfer Timeout';
-
-  @override
-  String get timeoutForFileTransfers => 'Timeout for file transfers (seconds)';
 
   @override
   String get appSettings => 'App Settings';
@@ -350,9 +395,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String minutesAgoLong(int count) {
     return '$count minutes ago';
   }
-
-  @override
-  String get timeoutUnit => 's';
 
   @override
   String get chinese => '中文';

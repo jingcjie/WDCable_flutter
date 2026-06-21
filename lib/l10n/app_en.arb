@@ -207,10 +207,53 @@
   "@receiveFiles": {
     "description": "Receive files section title"
   },
-  "filesWillBeAutomaticallyReceived": "Files will be automatically received when sent by peer",
+  "filesWillBeAutomaticallyReceived": "Files sent by the peer will be saved to {location}",
   "@filesWillBeAutomaticallyReceived": {
-    "description": "Description of automatic file receiving"
+    "description": "Description of automatic file receiving",
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
   },
+  "saveReceivedFilesTo": "Save received files to",
+  "appStorage": "App storage",
+  "downloadsFolder": "Downloads",
+  "chooseCustomFolder": "Choose custom folder",
+  "receiveDestinationFailed": "Could not use that receive location",
+  "fileReceived": "File received: {fileName}",
+  "@fileReceived": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTransferCancelled": "Transfer cancelled: {fileName}",
+  "@fileTransferCancelled": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTransferFailed": "Transfer failed for {fileName}: {error}",
+  "@fileTransferFailed": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "preparing": "Preparing",
+  "queued": "Queued",
+  "cancelling": "Cancelling...",
+  "cancelled": "Cancelled",
+  "failed": "Failed",
+  "cancel": "Cancel",
   "noActiveTransfers": "No Active Transfers",
   "@noActiveTransfers": {
     "description": "Message when no file transfers are active"
@@ -264,6 +307,18 @@
       }
     }
   },
+  "noSupportedAppToOpenFile": "There is no supported app to open {fileName}. It’s saved in {location}.",
+  "@noSupportedAppToOpenFile": {
+    "description": "Informational message when no installed app supports a received file",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "location": {
+        "type": "String"
+      }
+    }
+  },
   "systemLogs": "System Logs",
   "@systemLogs": {
     "description": "System logs section header"
@@ -275,18 +330,6 @@
   "customizeYourWifiDirectExperience": "Customize your WiFi Direct experience",
   "@customizeYourWifiDirectExperience": {
     "description": "Settings page subtitle"
-  },
-  "transferSettings": "Transfer Settings",
-  "@transferSettings": {
-    "description": "Transfer settings section title"
-  },
-  "transferTimeout": "Transfer Timeout",
-  "@transferTimeout": {
-    "description": "Transfer timeout setting title"
-  },
-  "timeoutForFileTransfers": "Timeout for file transfers (seconds)",
-  "@timeoutForFileTransfers": {
-    "description": "Transfer timeout setting description"
   },
   "appSettings": "App Settings",
   "@appSettings": {
@@ -487,10 +530,6 @@
         "type": "int"
       }
     }
-  },
-  "timeoutUnit": "s",
-  "@timeoutUnit": {
-    "description": "Unit for timeout (seconds)"
   },
   "chinese": "中文",
   "@chinese": {

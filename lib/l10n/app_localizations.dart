@@ -359,8 +359,92 @@ abstract class AppLocalizations {
   /// Description of automatic file receiving
   ///
   /// In en, this message translates to:
-  /// **'Files will be automatically received when sent by peer'**
-  String get filesWillBeAutomaticallyReceived;
+  /// **'Files sent by the peer will be saved to {location}'**
+  String filesWillBeAutomaticallyReceived(String location);
+
+  /// No description provided for @saveReceivedFilesTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Save received files to'**
+  String get saveReceivedFilesTo;
+
+  /// No description provided for @appStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'App storage'**
+  String get appStorage;
+
+  /// No description provided for @downloadsFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get downloadsFolder;
+
+  /// No description provided for @chooseCustomFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose custom folder'**
+  String get chooseCustomFolder;
+
+  /// No description provided for @receiveDestinationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not use that receive location'**
+  String get receiveDestinationFailed;
+
+  /// No description provided for @fileReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'File received: {fileName}'**
+  String fileReceived(String fileName);
+
+  /// No description provided for @fileTransferCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer cancelled: {fileName}'**
+  String fileTransferCancelled(String fileName);
+
+  /// No description provided for @fileTransferFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer failed for {fileName}: {error}'**
+  String fileTransferFailed(String fileName, String error);
+
+  /// No description provided for @preparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing'**
+  String get preparing;
+
+  /// No description provided for @queued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get queued;
+
+  /// No description provided for @cancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling...'**
+  String get cancelling;
+
+  /// No description provided for @cancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get cancelled;
+
+  /// No description provided for @failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get failed;
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancel;
 
   /// Message when no file transfers are active
   ///
@@ -434,6 +518,12 @@ abstract class AppLocalizations {
   /// **'Failed to open file: {error}'**
   String failedToOpenFile(String error);
 
+  /// Informational message when no installed app supports a received file
+  ///
+  /// In en, this message translates to:
+  /// **'There is no supported app to open {fileName}. It’s saved in {location}.'**
+  String noSupportedAppToOpenFile(String fileName, String location);
+
   /// System logs section header
   ///
   /// In en, this message translates to:
@@ -451,24 +541,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Customize your WiFi Direct experience'**
   String get customizeYourWifiDirectExperience;
-
-  /// Transfer settings section title
-  ///
-  /// In en, this message translates to:
-  /// **'Transfer Settings'**
-  String get transferSettings;
-
-  /// Transfer timeout setting title
-  ///
-  /// In en, this message translates to:
-  /// **'Transfer Timeout'**
-  String get transferTimeout;
-
-  /// Transfer timeout setting description
-  ///
-  /// In en, this message translates to:
-  /// **'Timeout for file transfers (seconds)'**
-  String get timeoutForFileTransfers;
 
   /// App settings section title
   ///
@@ -709,12 +781,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} minutes ago'**
   String minutesAgoLong(int count);
-
-  /// Unit for timeout (seconds)
-  ///
-  /// In en, this message translates to:
-  /// **'s'**
-  String get timeoutUnit;
 
   /// Chinese language option
   ///

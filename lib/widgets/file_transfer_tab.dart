@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
 import '../controllers/wifi_direct_controller.dart';
 import '../models/wifi_direct_models.dart';
+import '../wifi_direct_service.dart';
 
 class FileTransferTab extends StatefulWidget {
   final WiFiDirectController controller;
@@ -22,6 +24,8 @@ class _FileTransferTabState extends State<FileTransferTab>
     with TickerProviderStateMixin {
   late AnimationController _uploadAnimationController;
   late Animation<double> _uploadAnimation;
+  StreamSubscription<WiFiDirectEvent>? _transferEventSubscription;
+  bool _isPickingFile = false;
 
   @override
   void initState() {
@@ -36,15 +40,51 @@ class _FileTransferTabState extends State<FileTransferTab>
         curve: Curves.easeInOut,
       ),
     );
+    _transferEventSubscription = widget.controller.eventStream.listen((event) {
+      if (!mounted) return;
+      switch (event) {
+        case FileTransferCompletedEvent completed:
+          _showSnackBar(
+            completed.isUploading
+                ? AppLocalizations.of(context)!.fileSent(completed.fileName)
+                : AppLocalizations.of(
+                    context,
+                  )!.fileReceived(completed.fileName),
+            Colors.green,
+          );
+          break;
+        case FileTransferCancelledEvent cancelled:
+          _showSnackBar(
+            AppLocalizations.of(
+              context,
+            )!.fileTransferCancelled(cancelled.fileName),
+            Colors.grey.shade700,
+          );
+          break;
+        case FileTransferFailedEvent failed:
+          _showSnackBar(
+            AppLocalizations.of(context)!.fileTransferFailed(
+              failed.fileName,
+              failed.error ?? AppLocalizations.of(context)!.failed,
+            ),
+            Colors.red,
+          );
+          break;
+        default:
+          break;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _transferEventSubscription?.cancel();
     _uploadAnimationController.dispose();
     super.dispose();
   }
 
   Future<void> _pickAndSendFile() async {
+    if (_isPickingFile) return;
     if (!widget.state.isSessionReady) {
       _showSnackBar(
         AppLocalizations.of(context)!.pleaseConnectToPeerFirst,
@@ -54,6 +94,7 @@ class _FileTransferTabState extends State<FileTransferTab>
     }
 
     try {
+      setState(() => _isPickingFile = true);
       const platform = MethodChannel('wifi_direct_cable');
       final result = await platform.invokeMethod('pickFile');
 
@@ -65,19 +106,9 @@ class _FileTransferTabState extends State<FileTransferTab>
         final String fileName = fileInfo['name'];
 
         _uploadAnimationController.forward();
-        final sent = await widget.controller.sendFile(
-          filePath,
-          fileName: fileName,
-        );
+        await widget.controller.sendFile(filePath, fileName: fileName);
 
         if (!mounted) return;
-
-        if (sent) {
-          _showSnackBar(
-            AppLocalizations.of(context)!.fileSent(fileName),
-            Colors.green,
-          );
-        }
         _uploadAnimationController.reverse();
       }
       // If result is null (no file selected), just return without showing error
@@ -89,6 +120,10 @@ class _FileTransferTabState extends State<FileTransferTab>
         AppLocalizations.of(context)!.failedToSendFile(e.toString()),
         Colors.red,
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingFile = false);
+      }
     }
   }
 
@@ -218,7 +253,9 @@ class _FileTransferTabState extends State<FileTransferTab>
                 height: 80,
                 margin: const EdgeInsets.only(bottom: 16),
                 child: ElevatedButton(
-                  onPressed: isConnected ? _pickAndSendFile : null,
+                  onPressed: isConnected && !_isPickingFile
+                      ? _pickAndSendFile
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
@@ -281,11 +318,65 @@ class _FileTransferTabState extends State<FileTransferTab>
               ),
               const SizedBox(height: 4),
               Text(
-                AppLocalizations.of(context)!.filesWillBeAutomaticallyReceived,
+                AppLocalizations.of(
+                  context,
+                )!.filesWillBeAutomaticallyReceived(_receiveDestinationLabel()),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 12),
+              InputDecorator(
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.saveReceivedFilesTo,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: widget.state.receiveDestination.mode,
+                    isExpanded: true,
+                    isDense: true,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'app',
+                        child: Text(AppLocalizations.of(context)!.appStorage),
+                      ),
+                      DropdownMenuItem(
+                        value: 'downloads',
+                        child: Text(
+                          AppLocalizations.of(context)!.downloadsFolder,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'custom',
+                        child: Text(
+                          widget.state.receiveDestination.mode == 'custom'
+                              ? widget.state.receiveDestination.displayName
+                              : AppLocalizations.of(
+                                  context,
+                                )!.chooseCustomFolder,
+                        ),
+                      ),
+                    ],
+                    onChanged: (mode) async {
+                      if (mode == null) return;
+                      final success = mode == 'custom'
+                          ? await widget.controller
+                                .pickCustomReceiveDestination()
+                          : await widget.controller.setReceiveDestination(mode);
+                      if (!success && mounted) {
+                        _showSnackBar(
+                          AppLocalizations.of(
+                            context,
+                          )!.receiveDestinationFailed,
+                          Colors.red,
+                        );
+                      }
+                    },
+                  ),
                 ),
               ),
             ],
@@ -296,9 +387,10 @@ class _FileTransferTabState extends State<FileTransferTab>
   }
 
   Widget _buildTransferProgressSection(ThemeData theme) {
-    final currentTransfer = widget.state.currentFileTransfer;
+    final activeTransfers = widget.state.activeFileTransfers.values.toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    if (currentTransfer == null) {
+    if (activeTransfers.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -329,15 +421,23 @@ class _FileTransferTabState extends State<FileTransferTab>
       );
     }
 
+    return Column(
+      children: activeTransfers
+          .map((transfer) => _buildActiveTransferCard(transfer, theme))
+          .toList(),
+    );
+  }
+
+  Widget _buildActiveTransferCard(FileTransferInfo transfer, ThemeData theme) {
+    final hasKnownSize = transfer.fileSize >= 0;
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: currentTransfer.isCompleted
-              ? Colors.green.withValues(alpha: 0.3)
-              : theme.colorScheme.primary.withValues(alpha: 0.3),
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -346,19 +446,13 @@ class _FileTransferTabState extends State<FileTransferTab>
           Row(
             children: [
               Icon(
-                currentTransfer.isCompleted
-                    ? Icons.check_circle
-                    : (currentTransfer.isUploading
-                          ? Icons.upload
-                          : Icons.download),
-                color: currentTransfer.isCompleted
-                    ? Colors.green
-                    : theme.colorScheme.primary,
+                transfer.isUploading ? Icons.upload : Icons.download,
+                color: theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  currentTransfer.fileName,
+                  transfer.fileName,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -366,72 +460,44 @@ class _FileTransferTabState extends State<FileTransferTab>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Action buttons for completed transfers
-              if (currentTransfer.isCompleted) ...<Widget>[
-                // Open button for completed transfers with file path
-                if (currentTransfer.filePath != null)
-                  IconButton(
-                    onPressed: () => _openFile(currentTransfer.filePath!),
-                    icon: const Icon(Icons.open_in_new),
-                    iconSize: 20,
-                    color: theme.colorScheme.primary,
-                    tooltip: AppLocalizations.of(context)!.openFile,
-                    style: IconButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary.withValues(
-                        alpha: 0.1,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                    ),
-                  ),
-                // Clear button
-                IconButton(
-                  onPressed: () => widget.controller.clearCurrentTransfer(),
-                  icon: const Icon(Icons.clear),
-                  iconSize: 20,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  tooltip: AppLocalizations.of(context)!.clear,
-                  style: IconButton.styleFrom(
-                    backgroundColor: theme.colorScheme.surface,
-                    padding: const EdgeInsets.all(8),
-                  ),
+              if (transfer.canCancel)
+                TextButton.icon(
+                  onPressed: () =>
+                      widget.controller.cancelFileTransfer(transfer.transferId),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: Text(AppLocalizations.of(context)!.cancel),
+                )
+              else if (transfer.status == FileTransferStatus.cancelling)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
-            value: currentTransfer.progress,
+            value: hasKnownSize ? transfer.progress : null,
             backgroundColor: theme.colorScheme.outline.withValues(alpha: 0.2),
-            valueColor: AlwaysStoppedAnimation<Color>(
-              currentTransfer.isCompleted
-                  ? Colors.green
-                  : theme.colorScheme.primary,
-            ),
           ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${(currentTransfer.progress * 100).toStringAsFixed(1)}%',
+                hasKnownSize
+                    ? '${(transfer.progress * 100).toStringAsFixed(1)}%'
+                    : _formatFileSize(transfer.bytesTransferred),
                 style: TextStyle(
                   fontSize: 12,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
               Text(
-                currentTransfer.isCompleted
-                    ? (currentTransfer.isUploading
-                          ? AppLocalizations.of(context)!.uploadComplete
-                          : AppLocalizations.of(context)!.downloadComplete)
-                    : (currentTransfer.isUploading
-                          ? AppLocalizations.of(context)!.uploading
-                          : AppLocalizations.of(context)!.downloading),
+                _transferStatusLabel(transfer),
                 style: TextStyle(
                   fontSize: 12,
-                  color: currentTransfer.isCompleted
-                      ? Colors.green
-                      : theme.colorScheme.primary,
+                  color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -496,6 +562,12 @@ class _FileTransferTabState extends State<FileTransferTab>
   }
 
   Widget _buildFileTransferItem(FileTransferInfo transfer, ThemeData theme) {
+    final statusColor = switch (transfer.status) {
+      FileTransferStatus.completed => Colors.green,
+      FileTransferStatus.cancelled => Colors.grey,
+      FileTransferStatus.failed => Colors.red,
+      _ => Colors.orange,
+    };
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
@@ -511,15 +583,13 @@ class _FileTransferTabState extends State<FileTransferTab>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: transfer.isCompleted
-                  ? Colors.green.withValues(alpha: 0.1)
-                  : Colors.orange.withValues(alpha: 0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               transfer.isUploading ? Icons.upload : Icons.download,
               size: 20,
-              color: transfer.isCompleted ? Colors.green : Colors.orange,
+              color: statusColor,
             ),
           ),
           const SizedBox(width: 12),
@@ -537,7 +607,7 @@ class _FileTransferTabState extends State<FileTransferTab>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${transfer.isUploading ? AppLocalizations.of(context)!.sent : AppLocalizations.of(context)!.received} • ${_formatFileSize(transfer.fileSize)}',
+                  '${_transferStatusLabel(transfer)} • ${_formatFileSize(transfer.fileSize)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -551,7 +621,7 @@ class _FileTransferTabState extends State<FileTransferTab>
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: IconButton(
-                onPressed: () => _openFile(transfer.filePath!),
+                onPressed: () => _openFile(transfer),
                 icon: const Icon(Icons.open_in_new),
                 iconSize: 20,
                 color: theme.colorScheme.primary,
@@ -566,27 +636,59 @@ class _FileTransferTabState extends State<FileTransferTab>
             ),
           const SizedBox(width: 8),
           Icon(
-            transfer.isCompleted ? Icons.check_circle : Icons.error,
+            switch (transfer.status) {
+              FileTransferStatus.completed => Icons.check_circle,
+              FileTransferStatus.cancelled => Icons.cancel_outlined,
+              FileTransferStatus.failed => Icons.error,
+              _ => Icons.schedule,
+            },
             size: 20,
-            color: transfer.isCompleted ? Colors.green : Colors.red,
+            color: statusColor,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _openFile(String filePath) async {
+  Future<void> _openFile(FileTransferInfo transfer) async {
+    final filePath = transfer.filePath!;
     try {
       const platform = MethodChannel('wifi_direct_cable');
       await platform.invokeMethod('openFile', {'filePath': filePath});
-    } catch (e) {
+    } on PlatformException catch (e) {
       if (!mounted) return;
+
+      if (e.code == 'NO_APP_FOUND') {
+        _showSnackBar(
+          AppLocalizations.of(context)!.noSupportedAppToOpenFile(
+            transfer.fileName,
+            transfer.savedLocation ?? _fallbackSavedLocation(filePath),
+          ),
+          Theme.of(context).colorScheme.secondary,
+        );
+        return;
+      }
 
       _showSnackBar(
         AppLocalizations.of(context)!.failedToOpenFile(e.toString()),
         Colors.red,
       );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(
+        AppLocalizations.of(context)!.failedToOpenFile(e.toString()),
+        Colors.red,
+      );
     }
+  }
+
+  String _fallbackSavedLocation(String filePath) {
+    if (filePath.startsWith('content://')) {
+      return _receiveDestinationLabel();
+    }
+    final normalized = filePath.replaceAll('\\', '/');
+    final separator = normalized.lastIndexOf('/');
+    return separator > 0 ? normalized.substring(0, separator) : filePath;
   }
 
   String _formatFileSize(int bytes) {
@@ -597,5 +699,31 @@ class _FileTransferTabState extends State<FileTransferTab>
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String _transferStatusLabel(FileTransferInfo transfer) {
+    final localizations = AppLocalizations.of(context)!;
+    return switch (transfer.status) {
+      FileTransferStatus.preparing => localizations.preparing,
+      FileTransferStatus.queued => localizations.queued,
+      FileTransferStatus.transferring =>
+        transfer.isUploading
+            ? localizations.uploading
+            : localizations.downloading,
+      FileTransferStatus.cancelling => localizations.cancelling,
+      FileTransferStatus.completed =>
+        transfer.isUploading ? localizations.sent : localizations.received,
+      FileTransferStatus.cancelled => localizations.cancelled,
+      FileTransferStatus.failed => localizations.failed,
+    };
+  }
+
+  String _receiveDestinationLabel() {
+    final localizations = AppLocalizations.of(context)!;
+    return switch (widget.state.receiveDestination.mode) {
+      'downloads' => localizations.downloadsFolder,
+      'custom' => widget.state.receiveDestination.displayName,
+      _ => localizations.appStorage,
+    };
   }
 }

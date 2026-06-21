@@ -17,6 +17,7 @@ class WiFiDirectController {
 
   WiFiDirectState _currentState = WiFiDirectState();
   int _sessionRevision = 0;
+  int _fileTransferSequence = 0;
 
   /// Stream of state changes
   Stream<WiFiDirectState> get stateStream => _stateController.stream;
@@ -54,7 +55,7 @@ class WiFiDirectController {
       disconnectReason: null,
       lastSpeedTest: null,
       isSpeedTesting: false,
-      currentFileTransfer: null,
+      activeFileTransfers: const {},
       sessionCapabilities: const [],
       peerCapabilities: const [],
       audioMode: 'receive',
@@ -75,7 +76,7 @@ class WiFiDirectController {
     return base.copyWith(
       lastSpeedTest: null,
       isSpeedTesting: false,
-      currentFileTransfer: null,
+      activeFileTransfers: const {},
       audioState: 'idle',
       audioPeerReady: false,
       audioStreamId: null,
@@ -273,32 +274,41 @@ class WiFiDirectController {
         _handleBinaryDataReceived(binaryEvent.data);
         break;
 
-      case FileReceiveStartedEvent startEvent:
-        _handleFileReceiveStarted(startEvent.fileName, startEvent.fileSize);
+      case FileTransferStartedEvent transferEvent:
+        _handleFileTransferStarted(transferEvent);
         break;
 
-      case FileSendStartedEvent startEvent:
-        _handleFileSendStarted(startEvent.fileName, startEvent.fileSize);
+      case FileTransferProgressEvent transferEvent:
+        _handleFileTransferProgress(transferEvent);
         break;
 
-      case FileReceiveProgressEvent progressEvent:
-        _handleFileTransferProgress(
-          progressEvent.fileName,
-          progressEvent.progress,
+      case FileTransferCompletedEvent transferEvent:
+        _handleFileTransferTerminal(
+          transferEvent,
+          FileTransferStatus.completed,
         );
-        // _addLog('File receive progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
         break;
 
-      case FileSendProgressEvent progressEvent:
-        _handleFileTransferProgress(
-          progressEvent.fileName,
-          progressEvent.progress,
+      case FileTransferCancelledEvent transferEvent:
+        _handleFileTransferTerminal(
+          transferEvent,
+          FileTransferStatus.cancelled,
         );
-        // _addLog('File send progress: ${progressEvent.fileName} - ${(progressEvent.progress * 100).toStringAsFixed(1)}%');
         break;
 
-      case FileReceivedEvent fileEvent:
-        _handleFileReceived(fileEvent.fileName, fileEvent.filePath);
+      case FileTransferFailedEvent transferEvent:
+        _handleFileTransferTerminal(transferEvent, FileTransferStatus.failed);
+        break;
+
+      case ReceiveDestinationChangedEvent destinationEvent:
+        _updateState(
+          _currentState.copyWith(
+            receiveDestination: destinationEvent.destination,
+          ),
+        );
+        if (destinationEvent.message?.isNotEmpty == true) {
+          _addLog(destinationEvent.message!);
+        }
         break;
 
       case ErrorEvent errorEvent:
@@ -698,6 +708,7 @@ class WiFiDirectController {
     try {
       await loadAudioLatencyMode();
       await loadAudioQualityMode();
+      await loadReceiveDestination();
       final isEnabled = await _service.isWifiP2pEnabled();
       _updateState(_currentState.copyWith(isWifiP2pEnabled: isEnabled));
       final discoveryStatus = await _service.getDiscoveryStatus();
@@ -1272,183 +1283,212 @@ class WiFiDirectController {
       return false;
     }
 
+    final actualFileName =
+        fileName ?? filePath.split('/').last.split('\\').last;
+    final transferId = _nextFileTransferId();
+    final fileTransfer = FileTransferInfo(
+      transferId: transferId,
+      fileName: actualFileName,
+      fileSize: -1,
+      progress: 0.0,
+      isUploading: true,
+      status: FileTransferStatus.preparing,
+      timestamp: DateTime.now(),
+      filePath: filePath,
+    );
+    _putActiveTransfer(fileTransfer);
+    _addLog('Preparing file transfer: $actualFileName');
+
     try {
-      // Use provided file name or extract from path as fallback
-      final actualFileName =
-          fileName ?? filePath.split('/').last.split('\\').last;
-
-      // Create file transfer info (file size will be determined on Android side)
-      final fileTransfer = FileTransferInfo(
-        fileName: actualFileName,
-        fileSize: 0, // Will be updated when Android determines the actual size
-        progress: 0.0,
-        isUploading: true,
-        isCompleted: false,
-        timestamp: DateTime.now(),
+      await _service.startFileTransfer(
+        transferId: transferId,
         filePath: filePath,
+        fileName: actualFileName,
       );
-
-      // Update state with current transfer
-      _updateState(_currentState.copyWith(currentFileTransfer: fileTransfer));
-      _addLog('Starting file transfer: $actualFileName');
-
-      // Send file using service (this will trigger progress events)
-      final result = await _service.sendFileStream(filePath);
-      _addLog('File transfer initiated: $result');
+      final active = _currentState.activeFileTransfers[transferId];
+      if (active != null && active.status == FileTransferStatus.preparing) {
+        _putActiveTransfer(active.copyWith(status: FileTransferStatus.queued));
+      }
+      _addLog('File transfer queued: $actualFileName');
       return true;
-
-      // Note: The transfer completion will be handled by progress events
-      // reaching 100% or by error handling
     } catch (e) {
       _addLog('File transfer failed: $e');
-
-      // Mark transfer as failed
-      if (_currentState.currentFileTransfer != null) {
-        final failedTransfer = _currentState.currentFileTransfer!.copyWith(
-          isCompleted: true,
+      _finishTransfer(
+        fileTransfer.copyWith(
+          status: FileTransferStatus.failed,
           error: e.toString(),
-        );
-
-        final updatedRecent = List<FileTransferInfo>.from(
-          _currentState.recentFileTransfers,
-        )..insert(0, failedTransfer);
-
-        _updateState(
-          _currentState.copyWith(
-            currentFileTransfer: null,
-            recentFileTransfers: updatedRecent.take(10).toList(),
-          ),
-        );
-      }
+        ),
+      );
       return false;
     }
   }
 
-  void _handleFileReceiveStarted(String fileName, int fileSize) {
-    // Create a new file transfer for incoming file
-    final fileTransfer = FileTransferInfo(
-      fileName: fileName,
-      fileSize: fileSize,
-      progress: 0.0,
-      isUploading: false,
-      isCompleted: false,
-      timestamp: DateTime.now(),
+  Future<void> cancelFileTransfer(String transferId) async {
+    final transfer = _currentState.activeFileTransfers[transferId];
+    if (transfer == null || !transfer.canCancel) return;
+
+    _putActiveTransfer(
+      transfer.copyWith(status: FileTransferStatus.cancelling),
     );
-
-    _updateState(_currentState.copyWith(currentFileTransfer: fileTransfer));
-    _addLog('Starting file receive: $fileName (${_formatSize(fileSize)})');
-  }
-
-  void _handleFileSendStarted(String fileName, int fileSize) {
-    // Update the current file transfer with the actual file size from Android
-    final currentTransfer = _currentState.currentFileTransfer;
-    if (currentTransfer != null &&
-        currentTransfer.fileName == fileName &&
-        currentTransfer.isUploading) {
-      final updatedTransfer = currentTransfer.copyWith(fileSize: fileSize);
-      _updateState(
-        _currentState.copyWith(currentFileTransfer: updatedTransfer),
-      );
-      _addLog('File send started: $fileName (${_formatSize(fileSize)})');
-    }
-  }
-
-  void _handleFileTransferProgress(String fileName, double progress) {
-    if (_currentState.currentFileTransfer?.fileName == fileName) {
-      final updatedTransfer = _currentState.currentFileTransfer!.copyWith(
-        progress: progress,
-      );
-      _updateState(
-        _currentState.copyWith(currentFileTransfer: updatedTransfer),
-      );
-
-      // Mark transfer as completed when progress reaches 100% for both sent and received files
-      if (progress >= 1.0) {
-        final completedTransfer = updatedTransfer.copyWith(isCompleted: true);
-
-        _updateState(
-          _currentState.copyWith(currentFileTransfer: completedTransfer),
-        );
-
-        _addLog(
-          'File ${updatedTransfer.isUploading ? "send" : "receive"} completed: $fileName',
+    try {
+      await _service.cancelFileTransfer(transferId);
+      _addLog('Cancelling file transfer: ${transfer.fileName}');
+    } catch (e) {
+      final current = _currentState.activeFileTransfers[transferId];
+      if (current != null && !current.isTerminal) {
+        _putActiveTransfer(
+          current.copyWith(status: transfer.status, error: e.toString()),
         );
       }
+      _addLog('Failed to cancel file transfer: $e');
     }
   }
 
-  void _handleFileReceived(String fileName, String? filePath) {
-    final currentTransfer = _currentState.currentFileTransfer;
+  void _handleFileTransferStarted(FileTransferStartedEvent event) {
+    final existing = _currentState.activeFileTransfers[event.transferId];
+    if (existing?.isTerminal == true) return;
 
-    if (currentTransfer != null && currentTransfer.fileName == fileName) {
-      // Complete the current transfer
-      final completedTransfer = currentTransfer.copyWith(
-        progress: 1.0,
-        isCompleted: true,
-        filePath: filePath,
-      );
-
-      // Add to recent transfers and clear current transfer
-      final updatedRecent = List<FileTransferInfo>.from(
-        _currentState.recentFileTransfers,
-      )..insert(0, completedTransfer);
-
-      _updateState(
-        _currentState.copyWith(
-          currentFileTransfer: null,
-          recentFileTransfers: updatedRecent.take(10).toList(),
-        ),
-      );
-    } else {
-      final isDuplicateCompletion =
-          filePath != null &&
-          _currentState.recentFileTransfers.any(
-            (transfer) =>
-                !transfer.isUploading &&
-                transfer.isCompleted &&
-                transfer.fileName == fileName &&
-                transfer.filePath == filePath,
-          );
-      if (isDuplicateCompletion) {
-        _addLog('Ignoring duplicate file completion event: $fileName');
-        return;
-      }
-
-      // Handle case where we don't have a current transfer (shouldn't happen with new code)
-      final fileTransfer = FileTransferInfo(
-        fileName: fileName,
-        fileSize: 0,
-        progress: 1.0,
-        isUploading: false,
-        isCompleted: true,
-        timestamp: DateTime.now(),
-      );
-
-      final updatedRecent = List<FileTransferInfo>.from(
-        _currentState.recentFileTransfers,
-      )..insert(0, fileTransfer);
-
-      _updateState(
-        _currentState.copyWith(
-          recentFileTransfers: updatedRecent.take(10).toList(),
-        ),
-      );
-    }
-
-    _addLog('File received: $fileName');
+    final transfer =
+        (existing ??
+                FileTransferInfo(
+                  transferId: event.transferId,
+                  fileName: event.fileName,
+                  fileSize: event.fileSize,
+                  progress: event.progress,
+                  isUploading: event.isUploading,
+                  timestamp: DateTime.now(),
+                ))
+            .copyWith(
+              fileName: event.fileName,
+              fileSize: event.fileSize,
+              bytesTransferred: event.bytesTransferred,
+              progress: event.progress,
+              status: event.status,
+              savedLocation: event.savedLocation,
+              error: null,
+            );
+    _putActiveTransfer(transfer);
+    _addLog(
+      'File ${event.isUploading ? "send" : "receive"} started: '
+      '${event.fileName} (${_formatSize(event.fileSize)})',
+    );
   }
 
-  /// Clear the current file transfer from the UI
-  void clearCurrentTransfer() {
-    if (_currentState.currentFileTransfer != null) {
-      final currentTransfer = _currentState.currentFileTransfer!;
+  void _handleFileTransferProgress(FileTransferProgressEvent event) {
+    final existing = _currentState.activeFileTransfers[event.transferId];
+    if (existing == null || existing.isTerminal) return;
+    if (existing.status == FileTransferStatus.cancelling) return;
 
-      // Only clear if the transfer is completed
-      if (currentTransfer.isCompleted) {
-        // Simply clear the current transfer (history already added when transfer completed)
-        _updateState(_currentState.copyWith(currentFileTransfer: null));
-        _addLog('Cleared completed transfer: ${currentTransfer.fileName}');
-      }
+    _putActiveTransfer(
+      existing.copyWith(
+        fileName: event.fileName,
+        fileSize: event.fileSize,
+        bytesTransferred: event.bytesTransferred,
+        progress: event.progress,
+        status: event.status,
+        savedLocation: event.savedLocation,
+      ),
+    );
+  }
+
+  void _handleFileTransferTerminal(
+    FileTransferEvent event,
+    FileTransferStatus status,
+  ) {
+    final alreadyRecent = _currentState.recentFileTransfers.any(
+      (transfer) => transfer.transferId == event.transferId,
+    );
+    if (alreadyRecent) {
+      _addLog('Ignoring duplicate terminal transfer event: ${event.fileName}');
+      return;
+    }
+
+    final existing = _currentState.activeFileTransfers[event.transferId];
+    final transfer =
+        (existing ??
+                FileTransferInfo(
+                  transferId: event.transferId,
+                  fileName: event.fileName,
+                  fileSize: event.fileSize,
+                  progress: event.progress,
+                  isUploading: event.isUploading,
+                  timestamp: DateTime.now(),
+                ))
+            .copyWith(
+              fileName: event.fileName,
+              fileSize: event.fileSize,
+              bytesTransferred: event.bytesTransferred,
+              progress: status == FileTransferStatus.completed
+                  ? 1.0
+                  : event.progress,
+              status: status,
+              filePath: event.filePath,
+              savedLocation: event.savedLocation,
+              error: event.error,
+            );
+    _finishTransfer(transfer);
+    _addLog(
+      'File ${event.isUploading ? "send" : "receive"} ${status.name}: '
+      '${event.fileName}',
+    );
+  }
+
+  void _putActiveTransfer(FileTransferInfo transfer) {
+    final updated = Map<String, FileTransferInfo>.from(
+      _currentState.activeFileTransfers,
+    )..[transfer.transferId] = transfer;
+    _updateState(_currentState.copyWith(activeFileTransfers: updated));
+  }
+
+  void _finishTransfer(FileTransferInfo transfer) {
+    final active = Map<String, FileTransferInfo>.from(
+      _currentState.activeFileTransfers,
+    )..remove(transfer.transferId);
+    final recent = List<FileTransferInfo>.from(
+      _currentState.recentFileTransfers,
+    )..insert(0, transfer);
+    _updateState(
+      _currentState.copyWith(
+        activeFileTransfers: active,
+        recentFileTransfers: recent.take(20).toList(),
+      ),
+    );
+  }
+
+  String _nextFileTransferId() {
+    _fileTransferSequence++;
+    return '${DateTime.now().microsecondsSinceEpoch}-$_fileTransferSequence';
+  }
+
+  Future<void> loadReceiveDestination() async {
+    try {
+      final destination = await _service.getReceiveDestination();
+      _updateState(_currentState.copyWith(receiveDestination: destination));
+    } catch (e) {
+      _addLog('Failed to load receive destination: $e');
+    }
+  }
+
+  Future<bool> setReceiveDestination(String mode) async {
+    try {
+      final destination = await _service.setReceiveDestination(mode);
+      _updateState(_currentState.copyWith(receiveDestination: destination));
+      return true;
+    } catch (e) {
+      _addLog('Failed to set receive destination: $e');
+      return false;
+    }
+  }
+
+  Future<bool> pickCustomReceiveDestination() async {
+    try {
+      final destination = await _service.pickCustomReceiveDestination();
+      if (destination == null) return true;
+      _updateState(_currentState.copyWith(receiveDestination: destination));
+      return true;
+    } catch (e) {
+      _addLog('Failed to select receive destination: $e');
+      return false;
     }
   }
 

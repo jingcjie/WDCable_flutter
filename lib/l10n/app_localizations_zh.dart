@@ -150,7 +150,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get receiveFiles => '接收文件';
 
   @override
-  String get filesWillBeAutomaticallyReceived => '对等设备发送的文件将自动接收';
+  String filesWillBeAutomaticallyReceived(String location) {
+    return '对等设备发送的文件将保存到 $location';
+  }
+
+  @override
+  String get saveReceivedFilesTo => '接收文件保存到';
+
+  @override
+  String get appStorage => '应用存储';
+
+  @override
+  String get downloadsFolder => '下载文件夹';
+
+  @override
+  String get chooseCustomFolder => '选择自定义文件夹';
+
+  @override
+  String get receiveDestinationFailed => '无法使用该接收位置';
+
+  @override
+  String fileReceived(String fileName) {
+    return '已接收文件：$fileName';
+  }
+
+  @override
+  String fileTransferCancelled(String fileName) {
+    return '传输已取消：$fileName';
+  }
+
+  @override
+  String fileTransferFailed(String fileName, String error) {
+    return '文件 $fileName 传输失败：$error';
+  }
+
+  @override
+  String get preparing => '准备中';
+
+  @override
+  String get queued => '排队中';
+
+  @override
+  String get cancelling => '正在取消...';
+
+  @override
+  String get cancelled => '已取消';
+
+  @override
+  String get failed => '失败';
+
+  @override
+  String get cancel => '取消';
 
   @override
   String get noActiveTransfers => '无活动传输';
@@ -191,6 +241,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String noSupportedAppToOpenFile(String fileName, String location) {
+    return '没有支持打开 $fileName 的应用。文件已保存在 $location。';
+  }
+
+  @override
   String get systemLogs => '系统日志';
 
   @override
@@ -198,15 +253,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get customizeYourWifiDirectExperience => '自定义您的WiFi直连体验';
-
-  @override
-  String get transferSettings => '传输设置';
-
-  @override
-  String get transferTimeout => '传输超时';
-
-  @override
-  String get timeoutForFileTransfers => '文件传输超时时间（秒）';
 
   @override
   String get appSettings => '应用设置';
@@ -344,9 +390,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String minutesAgoLong(int count) {
     return '$count分钟前';
   }
-
-  @override
-  String get timeoutUnit => '秒';
 
   @override
   String get chinese => '中文';

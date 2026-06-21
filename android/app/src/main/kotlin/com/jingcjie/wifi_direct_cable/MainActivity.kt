@@ -42,6 +42,7 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
         chatService = ChatService(sessionManager, methodChannel)
         speedTestService = SpeedTestService(sessionManager, methodChannel)
         fileTransferService = FileTransferService(this, sessionManager, methodChannel)
+        sessionManager.registerFileTransferCleanup(fileTransferService::cancelAll)
         audioService = AudioService(this, sessionManager, methodChannel, permissionManager)
         
         methodChannelHandler = FlutterMethodChannelHandler(
@@ -84,6 +85,9 @@ class MainActivity : FlutterActivity(), WiFiDirectManager.ConnectionListener {
 
     override fun onDestroy() {
         WdCableRuntime.unregisterReceiver(WdCableRuntime.ReceiverOwner.ACTIVITY)
+        if (::fileTransferService.isInitialized) {
+            fileTransferService.cleanup()
+        }
         if (::sessionManager.isInitialized) {
             sessionManager.cleanup()
         }

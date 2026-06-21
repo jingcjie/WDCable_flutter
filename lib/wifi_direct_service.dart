@@ -174,34 +174,101 @@ class SpeedTestSendProgressEvent extends WiFiDirectEvent {
   );
 }
 
-class FileReceiveProgressEvent extends WiFiDirectEvent {
-  final String fileName;
-  final double progress;
-  FileReceiveProgressEvent(this.fileName, this.progress);
-}
-
-class FileSendProgressEvent extends WiFiDirectEvent {
-  final String fileName;
-  final double progress;
-  FileSendProgressEvent(this.fileName, this.progress);
-}
-
-class FileReceiveStartedEvent extends WiFiDirectEvent {
+abstract class FileTransferEvent extends WiFiDirectEvent {
+  final String transferId;
   final String fileName;
   final int fileSize;
-  FileReceiveStartedEvent(this.fileName, this.fileSize);
-}
-
-class FileSendStartedEvent extends WiFiDirectEvent {
-  final String fileName;
-  final int fileSize;
-  FileSendStartedEvent(this.fileName, this.fileSize);
-}
-
-class FileReceivedEvent extends WiFiDirectEvent {
-  final String fileName;
+  final int bytesTransferred;
+  final bool isUploading;
   final String? filePath;
-  FileReceivedEvent(this.fileName, {this.filePath});
+  final String? savedLocation;
+  final String? error;
+
+  FileTransferEvent({
+    required this.transferId,
+    required this.fileName,
+    required this.fileSize,
+    required this.bytesTransferred,
+    required this.isUploading,
+    this.filePath,
+    this.savedLocation,
+    this.error,
+  });
+
+  double get progress {
+    if (fileSize < 0) return 0.0;
+    if (fileSize == 0) return 1.0;
+    return (bytesTransferred / fileSize).clamp(0.0, 1.0);
+  }
+}
+
+class FileTransferStartedEvent extends FileTransferEvent {
+  final FileTransferStatus status;
+
+  FileTransferStartedEvent({
+    required super.transferId,
+    required super.fileName,
+    required super.fileSize,
+    required super.bytesTransferred,
+    required super.isUploading,
+    super.savedLocation,
+    this.status = FileTransferStatus.transferring,
+  });
+}
+
+class FileTransferProgressEvent extends FileTransferEvent {
+  final FileTransferStatus status;
+
+  FileTransferProgressEvent({
+    required super.transferId,
+    required super.fileName,
+    required super.fileSize,
+    required super.bytesTransferred,
+    required super.isUploading,
+    super.savedLocation,
+    this.status = FileTransferStatus.transferring,
+  });
+}
+
+class FileTransferCompletedEvent extends FileTransferEvent {
+  FileTransferCompletedEvent({
+    required super.transferId,
+    required super.fileName,
+    required super.fileSize,
+    required super.bytesTransferred,
+    required super.isUploading,
+    super.filePath,
+    super.savedLocation,
+  });
+}
+
+class FileTransferCancelledEvent extends FileTransferEvent {
+  FileTransferCancelledEvent({
+    required super.transferId,
+    required super.fileName,
+    required super.fileSize,
+    required super.bytesTransferred,
+    required super.isUploading,
+    super.error,
+  });
+}
+
+class FileTransferFailedEvent extends FileTransferEvent {
+  FileTransferFailedEvent({
+    required super.transferId,
+    required super.fileName,
+    required super.fileSize,
+    required super.bytesTransferred,
+    required super.isUploading,
+    super.error,
+  });
+}
+
+class ReceiveDestinationChangedEvent extends WiFiDirectEvent {
+  final ReceiveDestinationInfo destination;
+  final String? message;
+
+  ReceiveDestinationChangedEvent(this.destination, {this.message});
 }
 
 class ErrorEvent extends WiFiDirectEvent {
@@ -565,56 +632,87 @@ class WiFiDirectService {
           );
           break;
 
-        case 'onFileReceiveStarted':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
-            call.arguments as Map,
-          );
+        case 'onFileTransferStarted':
+          final data = _fileTransferData(call.arguments);
           _eventController.add(
-            FileReceiveStartedEvent(fileData['fileName'], fileData['fileSize']),
-          );
-          break;
-
-        case 'onFileSendStarted':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
-            call.arguments as Map,
-          );
-          _eventController.add(
-            FileSendStartedEvent(fileData['fileName'], fileData['fileSize']),
-          );
-          break;
-
-        case 'onFileReceiveProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
-            call.arguments as Map,
-          );
-          _eventController.add(
-            FileReceiveProgressEvent(
-              progressData['fileName'],
-              progressData['progress'].toDouble(),
+            FileTransferStartedEvent(
+              transferId: data.transferId,
+              fileName: data.fileName,
+              fileSize: data.fileSize,
+              bytesTransferred: data.bytesTransferred,
+              isUploading: data.isUploading,
+              savedLocation: data.savedLocation,
+              status: FileTransferStatus.fromName(data.status),
             ),
           );
           break;
 
-        case 'onFileSendProgress':
-          final Map<String, dynamic> progressData = Map<String, dynamic>.from(
-            call.arguments as Map,
-          );
+        case 'onFileTransferProgress':
+          final data = _fileTransferData(call.arguments);
           _eventController.add(
-            FileSendProgressEvent(
-              progressData['fileName'],
-              progressData['progress'].toDouble(),
+            FileTransferProgressEvent(
+              transferId: data.transferId,
+              fileName: data.fileName,
+              fileSize: data.fileSize,
+              bytesTransferred: data.bytesTransferred,
+              isUploading: data.isUploading,
+              savedLocation: data.savedLocation,
+              status: FileTransferStatus.fromName(data.status),
             ),
           );
           break;
 
-        case 'onFileReceived':
-          final Map<String, dynamic> fileData = Map<String, dynamic>.from(
+        case 'onFileTransferCompleted':
+          final data = _fileTransferData(call.arguments);
+          _eventController.add(
+            FileTransferCompletedEvent(
+              transferId: data.transferId,
+              fileName: data.fileName,
+              fileSize: data.fileSize,
+              bytesTransferred: data.bytesTransferred,
+              isUploading: data.isUploading,
+              filePath: data.filePath,
+              savedLocation: data.savedLocation,
+            ),
+          );
+          break;
+
+        case 'onFileTransferCancelled':
+          final data = _fileTransferData(call.arguments);
+          _eventController.add(
+            FileTransferCancelledEvent(
+              transferId: data.transferId,
+              fileName: data.fileName,
+              fileSize: data.fileSize,
+              bytesTransferred: data.bytesTransferred,
+              isUploading: data.isUploading,
+              error: data.error,
+            ),
+          );
+          break;
+
+        case 'onFileTransferFailed':
+          final data = _fileTransferData(call.arguments);
+          _eventController.add(
+            FileTransferFailedEvent(
+              transferId: data.transferId,
+              fileName: data.fileName,
+              fileSize: data.fileSize,
+              bytesTransferred: data.bytesTransferred,
+              isUploading: data.isUploading,
+              error: data.error,
+            ),
+          );
+          break;
+
+        case 'onReceiveDestinationChanged':
+          final Map<String, dynamic> data = Map<String, dynamic>.from(
             call.arguments as Map,
           );
           _eventController.add(
-            FileReceivedEvent(
-              fileData['fileName'],
-              filePath: fileData['filePath'],
+            ReceiveDestinationChangedEvent(
+              ReceiveDestinationInfo.fromMap(data),
+              message: data['message']?.toString(),
             ),
           );
           break;
@@ -781,31 +879,54 @@ class WiFiDirectService {
     }
   }
 
-  Future<String> sendFileStream(String filePath) async {
+  Future<void> startFileTransfer({
+    required String transferId,
+    required String filePath,
+    required String fileName,
+  }) async {
     try {
-      final String result = await _channel.invokeMethod('sendFileStream', {
+      await _channel.invokeMethod('startFileTransfer', {
+        'transferId': transferId,
         'filePath': filePath,
+        'fileName': fileName,
       });
-      return result;
     } catch (e) {
-      throw Exception('Failed to send file stream: $e');
+      throw Exception('Failed to start file transfer: $e');
     }
   }
 
-  Future<void> configureTcpSettings({
-    required int bufferSize,
-    required int timeout,
-    required bool keepAlive,
-  }) async {
+  Future<void> cancelFileTransfer(String transferId) async {
     try {
-      await _channel.invokeMethod('configureTcpSettings', {
-        'bufferSize': bufferSize,
-        'timeout': timeout,
-        'keepAlive': keepAlive,
+      await _channel.invokeMethod('cancelFileTransfer', {
+        'transferId': transferId,
       });
     } catch (e) {
-      throw Exception('Failed to configure TCP settings: $e');
+      throw Exception('Failed to cancel file transfer: $e');
     }
+  }
+
+  Future<ReceiveDestinationInfo> getReceiveDestination() async {
+    final result = await _channel.invokeMethod('getReceiveDestination');
+    return ReceiveDestinationInfo.fromMap(
+      Map<String, dynamic>.from(result as Map),
+    );
+  }
+
+  Future<ReceiveDestinationInfo> setReceiveDestination(String mode) async {
+    final result = await _channel.invokeMethod('setReceiveDestination', {
+      'mode': mode,
+    });
+    return ReceiveDestinationInfo.fromMap(
+      Map<String, dynamic>.from(result as Map),
+    );
+  }
+
+  Future<ReceiveDestinationInfo?> pickCustomReceiveDestination() async {
+    final result = await _channel.invokeMethod('pickCustomReceiveDestination');
+    if (result == null) return null;
+    return ReceiveDestinationInfo.fromMap(
+      Map<String, dynamic>.from(result as Map),
+    );
   }
 
   Future<Map<String, dynamic>> getConnectionStats() async {
@@ -974,4 +1095,43 @@ int _readEventInt(Object? value, {int fallback = 0}) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+_PlatformFileTransferData _fileTransferData(Object? arguments) {
+  final data = Map<String, dynamic>.from(arguments as Map);
+  return _PlatformFileTransferData(
+    transferId: data['transferId']?.toString() ?? '',
+    fileName: data['fileName']?.toString() ?? 'unknown_file',
+    fileSize: _readEventInt(data['fileSize'], fallback: -1),
+    bytesTransferred: _readEventInt(data['bytesTransferred']),
+    isUploading: data['direction']?.toString() == 'send',
+    status: data['status']?.toString(),
+    filePath: data['filePath']?.toString(),
+    savedLocation: data['savedLocation']?.toString(),
+    error: data['error']?.toString(),
+  );
+}
+
+class _PlatformFileTransferData {
+  final String transferId;
+  final String fileName;
+  final int fileSize;
+  final int bytesTransferred;
+  final bool isUploading;
+  final String? status;
+  final String? filePath;
+  final String? savedLocation;
+  final String? error;
+
+  const _PlatformFileTransferData({
+    required this.transferId,
+    required this.fileName,
+    required this.fileSize,
+    required this.bytesTransferred,
+    required this.isUploading,
+    this.status,
+    this.filePath,
+    this.savedLocation,
+    this.error,
+  });
 }

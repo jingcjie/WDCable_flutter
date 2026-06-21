@@ -18,8 +18,6 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  double _transferTimeout = 30.0;
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -92,24 +90,6 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
           ),
           const SizedBox(height: 24),
-
-          // Transfer Settings Section
-          _buildSection(
-            AppLocalizations.of(context)!.transferSettings,
-            Icons.swap_horiz,
-            [
-              _buildSliderSetting(
-                AppLocalizations.of(context)!.transferTimeout,
-                AppLocalizations.of(context)!.timeoutForFileTransfers,
-                Icons.timer,
-                _transferTimeout,
-                5.0,
-                120.0,
-                (value) => setState(() => _transferTimeout = value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
 
           // App Settings Section
           _buildSection(
@@ -360,76 +340,6 @@ class _SettingsTabState extends State<SettingsTab> {
             value: value,
             onChanged: enabled ? onChanged : null,
             activeThumbColor: Theme.of(context).colorScheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSliderSetting(
-    String title,
-    String subtitle,
-    IconData icon,
-    double value,
-    double min,
-    double max,
-    ValueChanged<double> onChanged,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: Colors.grey[600], size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${value.round()}${AppLocalizations.of(context)!.timeoutUnit}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: Theme.of(context).colorScheme.primary,
-              inactiveTrackColor: Colors.grey[300],
-              thumbColor: Theme.of(context).colorScheme.primary,
-              overlayColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: ((max - min) / 5).round(),
-              onChanged: onChanged,
-            ),
           ),
         ],
       ),

@@ -225,72 +225,150 @@ class SpeedTestResult {
   }
 }
 
+enum FileTransferStatus {
+  preparing,
+  queued,
+  transferring,
+  cancelling,
+  completed,
+  cancelled,
+  failed;
+
+  static FileTransferStatus fromName(String? value) {
+    return FileTransferStatus.values.firstWhere(
+      (status) => status.name == value,
+      orElse: () => FileTransferStatus.transferring,
+    );
+  }
+
+  bool get isTerminal =>
+      this == FileTransferStatus.completed ||
+      this == FileTransferStatus.cancelled ||
+      this == FileTransferStatus.failed;
+}
+
 class FileTransferInfo {
+  final String transferId;
   final String fileName;
   final int fileSize;
+  final int bytesTransferred;
   final double progress;
   final bool isUploading;
-  final bool isCompleted;
+  final FileTransferStatus status;
   final DateTime timestamp;
   final String? filePath;
+  final String? savedLocation;
   final String? error;
 
   FileTransferInfo({
+    required this.transferId,
     required this.fileName,
     required this.fileSize,
+    this.bytesTransferred = 0,
     required this.progress,
     required this.isUploading,
-    required this.isCompleted,
+    this.status = FileTransferStatus.transferring,
     required this.timestamp,
     this.filePath,
+    this.savedLocation,
     this.error,
   });
 
+  bool get isCompleted => status == FileTransferStatus.completed;
+
+  bool get isCancelled => status == FileTransferStatus.cancelled;
+
+  bool get isFailed => status == FileTransferStatus.failed;
+
+  bool get isTerminal => status.isTerminal;
+
+  bool get canCancel =>
+      isUploading &&
+      (status == FileTransferStatus.preparing ||
+          status == FileTransferStatus.queued ||
+          status == FileTransferStatus.transferring);
+
   Map<String, dynamic> toMap() {
     return {
+      'transferId': transferId,
       'fileName': fileName,
       'fileSize': fileSize,
+      'bytesTransferred': bytesTransferred,
       'progress': progress,
       'isUploading': isUploading,
-      'isCompleted': isCompleted,
+      'status': status.name,
       'timestamp': timestamp.millisecondsSinceEpoch,
       'filePath': filePath,
+      'savedLocation': savedLocation,
       'error': error,
     };
   }
 
   factory FileTransferInfo.fromMap(Map<String, dynamic> map) {
     return FileTransferInfo(
+      transferId: map['transferId'] ?? '',
       fileName: map['fileName'] ?? '',
       fileSize: map['fileSize'] ?? 0,
+      bytesTransferred: map['bytesTransferred'] ?? 0,
       progress: map['progress']?.toDouble() ?? 0.0,
       isUploading: map['isUploading'] ?? false,
-      isCompleted: map['isCompleted'] ?? false,
+      status: FileTransferStatus.fromName(map['status']?.toString()),
       timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] ?? 0),
       filePath: map['filePath'],
+      savedLocation: map['savedLocation'],
       error: map['error'],
     );
   }
 
   FileTransferInfo copyWith({
+    String? transferId,
     String? fileName,
     int? fileSize,
+    int? bytesTransferred,
     double? progress,
     bool? isUploading,
-    bool? isCompleted,
+    FileTransferStatus? status,
     DateTime? timestamp,
-    String? filePath,
-    String? error,
+    Object? filePath = _unset,
+    Object? savedLocation = _unset,
+    Object? error = _unset,
   }) {
     return FileTransferInfo(
+      transferId: transferId ?? this.transferId,
       fileName: fileName ?? this.fileName,
       fileSize: fileSize ?? this.fileSize,
+      bytesTransferred: bytesTransferred ?? this.bytesTransferred,
       progress: progress ?? this.progress,
       isUploading: isUploading ?? this.isUploading,
-      isCompleted: isCompleted ?? this.isCompleted,
+      status: status ?? this.status,
       timestamp: timestamp ?? this.timestamp,
-      filePath: filePath ?? this.filePath,
-      error: error ?? this.error,
+      filePath: identical(filePath, _unset)
+          ? this.filePath
+          : filePath as String?,
+      savedLocation: identical(savedLocation, _unset)
+          ? this.savedLocation
+          : savedLocation as String?,
+      error: identical(error, _unset) ? this.error : error as String?,
+    );
+  }
+}
+
+class ReceiveDestinationInfo {
+  final String mode;
+  final String displayName;
+  final String? uri;
+
+  const ReceiveDestinationInfo({
+    this.mode = 'app',
+    this.displayName = 'App storage',
+    this.uri,
+  });
+
+  factory ReceiveDestinationInfo.fromMap(Map<String, dynamic> map) {
+    return ReceiveDestinationInfo(
+      mode: map['mode']?.toString() ?? 'app',
+      displayName: map['displayName']?.toString() ?? 'App storage',
+      uri: map['uri']?.toString(),
     );
   }
 }
@@ -617,8 +695,9 @@ class WiFiDirectState {
   final SpeedTestResult? lastSpeedTest;
   final bool isSpeedTesting;
   final List<SpeedTestResult> speedTestResults;
-  final FileTransferInfo? currentFileTransfer;
+  final Map<String, FileTransferInfo> activeFileTransfers;
   final List<FileTransferInfo> recentFileTransfers;
+  final ReceiveDestinationInfo receiveDestination;
   final AudioSupportInfo audioSupport;
   final String audioMode;
   final String audioLatencyMode;
@@ -659,8 +738,9 @@ class WiFiDirectState {
     this.lastSpeedTest,
     this.isSpeedTesting = false,
     this.speedTestResults = const [],
-    this.currentFileTransfer,
+    this.activeFileTransfers = const {},
     this.recentFileTransfers = const [],
+    this.receiveDestination = const ReceiveDestinationInfo(),
     this.audioSupport = const AudioSupportInfo(),
     this.audioMode = 'receive',
     this.audioLatencyMode = 'lowLatency',
@@ -702,8 +782,9 @@ class WiFiDirectState {
     Object? lastSpeedTest = _unset,
     bool? isSpeedTesting,
     List<SpeedTestResult>? speedTestResults,
-    Object? currentFileTransfer = _unset,
+    Map<String, FileTransferInfo>? activeFileTransfers,
     List<FileTransferInfo>? recentFileTransfers,
+    ReceiveDestinationInfo? receiveDestination,
     AudioSupportInfo? audioSupport,
     String? audioMode,
     String? audioLatencyMode,
@@ -761,10 +842,9 @@ class WiFiDirectState {
           : lastSpeedTest as SpeedTestResult?,
       isSpeedTesting: isSpeedTesting ?? this.isSpeedTesting,
       speedTestResults: speedTestResults ?? this.speedTestResults,
-      currentFileTransfer: identical(currentFileTransfer, _unset)
-          ? this.currentFileTransfer
-          : currentFileTransfer as FileTransferInfo?,
+      activeFileTransfers: activeFileTransfers ?? this.activeFileTransfers,
       recentFileTransfers: recentFileTransfers ?? this.recentFileTransfers,
+      receiveDestination: receiveDestination ?? this.receiveDestination,
       audioSupport: audioSupport ?? this.audioSupport,
       audioMode: audioMode ?? this.audioMode,
       audioLatencyMode: audioLatencyMode ?? this.audioLatencyMode,

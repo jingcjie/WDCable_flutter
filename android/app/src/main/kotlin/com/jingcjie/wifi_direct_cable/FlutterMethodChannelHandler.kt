@@ -50,16 +50,40 @@ class FlutterMethodChannelHandler(
                 chatService.sendData(data, result)
             }
 
-            "sendFileStream" -> {
+            "startFileTransfer" -> {
+                val transferId = call.argument<String>("transferId")
                 val filePath = call.argument<String>("filePath")
-                fileTransferService.sendFileStream(filePath, result)
+                val fileName = call.argument<String>("fileName")
+                fileTransferService.startFileTransfer(
+                    transferId,
+                    filePath,
+                    fileName,
+                    result
+                )
             }
-            "configureTcpSettings" -> {
-                val bufferSize = call.argument<Int>("bufferSize") ?: 8192
-                val timeout = call.argument<Int>("timeout") ?: 30000
-                val keepAlive = call.argument<Boolean>("keepAlive") ?: true
-                sessionManager.configureTransportSettings(bufferSize, timeout, keepAlive)
-                result.success("Transport settings configured")
+            "cancelFileTransfer" -> {
+                fileTransferService.cancelFileTransfer(
+                    call.argument<String>("transferId"),
+                    result
+                )
+            }
+            "getReceiveDestination" -> {
+                result.success(sessionManager.getReceiveDestination().toMap())
+            }
+            "setReceiveDestination" -> {
+                try {
+                    val mode = call.argument<String>("mode") ?: "app"
+                    result.success(sessionManager.setReceiveDestination(mode).toMap())
+                } catch (exception: Exception) {
+                    result.error(
+                        "DESTINATION_ERROR",
+                        exception.message ?: "Unable to set receive destination",
+                        null
+                    )
+                }
+            }
+            "pickCustomReceiveDestination" -> {
+                fileTransferService.pickCustomReceiveDestination(result)
             }
             "getConnectionStats" -> {
                 val stats = sessionManager.getConnectionStats()
