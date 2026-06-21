@@ -8,7 +8,6 @@ object AudioProtocol {
     const val KIND_RECEIVE_STOPPED = "audio.receive.stopped"
     const val KIND_OFFER = "audio.offer"
     const val KIND_ACCEPT = "audio.accept"
-    const val KIND_TRANSPORT = "audio.transport"
     const val KIND_STOP = "audio.stop"
 
     const val ERROR_UNSUPPORTED = "audio_unsupported"
@@ -30,7 +29,6 @@ object AudioProtocol {
     const val CODEC_OPUS = "opus"
     const val CODEC_IMPL_LIBOPUS = "libopus"
     const val TRANSPORT_RTP_UDP = "rtp-udp"
-    const val TRANSPORT_TCP = "tcp"
 
     const val SAMPLE_RATE = 48_000
     const val CHANNELS = 1
@@ -122,10 +120,6 @@ object AudioProtocol {
         .put("transportRole", transportRole.eventName)
         .put("receiverProbeRequired", receiverProbeRequired)
 
-    fun transport(streamId: Long, port: Int): JSONObject = base(KIND_TRANSPORT, streamId)
-        .put("transport", TRANSPORT_TCP)
-        .put("port", port)
-
     fun stop(streamId: Long, reason: String): JSONObject = base(KIND_STOP, streamId)
         .put("reason", reason)
 
@@ -175,15 +169,6 @@ object AudioProtocol {
         )
     }
 
-    fun parseTransport(metadata: JSONObject): AudioTransportOffer {
-        requireKind(metadata, KIND_TRANSPORT)
-        return AudioTransportOffer(
-            streamId = requiredLong(metadata, "streamId"),
-            transport = requiredString(metadata, "transport"),
-            port = metadata.optInt("port", -1)
-        )
-    }
-
     fun validateOffer(offer: AudioOffer): Boolean {
         return offerRejectionReason(offer) == null
     }
@@ -193,74 +178,37 @@ object AudioProtocol {
     }
 
     fun offerRejectionReason(offer: AudioOffer): String? {
-        if (offer.transport != TRANSPORT_RTP_UDP) {
-            return "transport=${offer.transport}; expected=$TRANSPORT_RTP_UDP"
-        }
-        if (!isSupportedSource(offer.source)) {
-            return "source=${offer.source}; supported=$SOURCE_MICROPHONE,$SOURCE_SYSTEM_AUDIO"
-        }
-        if (offer.codec != CODEC_OPUS) {
-            return "codec=${offer.codec}; expected=$CODEC_OPUS"
-        }
-        if (offer.codecImpl != CODEC_IMPL_LIBOPUS) {
-            return "codecImpl=${offer.codecImpl}; expected=$CODEC_IMPL_LIBOPUS"
-        }
-        if (offer.sampleRate != SAMPLE_RATE) {
-            return "sampleRate=${offer.sampleRate}; expected=$SAMPLE_RATE"
-        }
-        if (offer.channels != CHANNELS) {
-            return "channels=${offer.channels}; expected=$CHANNELS"
-        }
-        if (offer.frameDurationMs != FRAME_DURATION_MS) {
-            return "frameDurationMs=${offer.frameDurationMs}; expected=$FRAME_DURATION_MS"
-        }
-        if (!isSupportedLatencyMode(offer.latencyMode)) {
-            return "latencyMode=${offer.latencyMode}; supported=$LATENCY_LOW,$LATENCY_STABLE"
-        }
-        if (!isSupportedQualityBitratePair(offer.qualityMode, offer.bitrateBps)) {
-            return "qualityMode=${offer.qualityMode},bitrateBps=${offer.bitrateBps}; expected a supported quality/bitrate pair"
-        }
-        if (offer.rtpPayloadType != RTP_PAYLOAD_TYPE) {
-            return "rtpPayloadType=${offer.rtpPayloadType}; expected=$RTP_PAYLOAD_TYPE"
-        }
-        if (offer.rtpClockRate != RTP_CLOCK_RATE) {
-            return "rtpClockRate=${offer.rtpClockRate}; expected=$RTP_CLOCK_RATE"
-        }
-        return null
+        return rtpFormatRejectionReason(
+            transport = offer.transport,
+            source = offer.source,
+            codec = offer.codec,
+            codecImpl = offer.codecImpl,
+            sampleRate = offer.sampleRate,
+            channels = offer.channels,
+            frameDurationMs = offer.frameDurationMs,
+            latencyMode = offer.latencyMode,
+            qualityMode = offer.qualityMode,
+            bitrateBps = offer.bitrateBps,
+            rtpPayloadType = offer.rtpPayloadType,
+            rtpClockRate = offer.rtpClockRate
+        )
     }
 
     fun acceptRejectionReason(accept: AudioAccept): String? {
-        if (accept.transport != TRANSPORT_RTP_UDP) {
-            return "transport=${accept.transport}; expected=$TRANSPORT_RTP_UDP"
-        }
-        if (accept.codec != CODEC_OPUS) {
-            return "codec=${accept.codec}; expected=$CODEC_OPUS"
-        }
-        if (accept.codecImpl != CODEC_IMPL_LIBOPUS) {
-            return "codecImpl=${accept.codecImpl}; expected=$CODEC_IMPL_LIBOPUS"
-        }
-        if (accept.sampleRate != SAMPLE_RATE) {
-            return "sampleRate=${accept.sampleRate}; expected=$SAMPLE_RATE"
-        }
-        if (accept.channels != CHANNELS) {
-            return "channels=${accept.channels}; expected=$CHANNELS"
-        }
-        if (accept.frameDurationMs != FRAME_DURATION_MS) {
-            return "frameDurationMs=${accept.frameDurationMs}; expected=$FRAME_DURATION_MS"
-        }
-        if (!isSupportedLatencyMode(accept.latencyMode)) {
-            return "latencyMode=${accept.latencyMode}; supported=$LATENCY_LOW,$LATENCY_STABLE"
-        }
-        if (!isSupportedQualityBitratePair(accept.qualityMode, accept.bitrateBps)) {
-            return "qualityMode=${accept.qualityMode},bitrateBps=${accept.bitrateBps}; expected a supported quality/bitrate pair"
-        }
-        if (accept.rtpPayloadType != RTP_PAYLOAD_TYPE) {
-            return "rtpPayloadType=${accept.rtpPayloadType}; expected=$RTP_PAYLOAD_TYPE"
-        }
-        if (accept.rtpClockRate != RTP_CLOCK_RATE) {
-            return "rtpClockRate=${accept.rtpClockRate}; expected=$RTP_CLOCK_RATE"
-        }
-        return null
+        return rtpFormatRejectionReason(
+            transport = accept.transport,
+            source = null,
+            codec = accept.codec,
+            codecImpl = accept.codecImpl,
+            sampleRate = accept.sampleRate,
+            channels = accept.channels,
+            frameDurationMs = accept.frameDurationMs,
+            latencyMode = accept.latencyMode,
+            qualityMode = accept.qualityMode,
+            bitrateBps = accept.bitrateBps,
+            rtpPayloadType = accept.rtpPayloadType,
+            rtpClockRate = accept.rtpClockRate
+        )
     }
 
     fun isSupportedSource(source: String): Boolean {
@@ -334,6 +282,56 @@ object AudioProtocol {
     private fun requireKind(metadata: JSONObject, kind: String) {
         val actual = metadata.optString("kind")
         require(actual == kind) { "Expected $kind, received $actual" }
+    }
+
+    private fun rtpFormatRejectionReason(
+        transport: String,
+        source: String?,
+        codec: String,
+        codecImpl: String,
+        sampleRate: Int,
+        channels: Int,
+        frameDurationMs: Int,
+        latencyMode: String,
+        qualityMode: String,
+        bitrateBps: Int,
+        rtpPayloadType: Int,
+        rtpClockRate: Int
+    ): String? {
+        if (transport != TRANSPORT_RTP_UDP) {
+            return "transport=$transport; expected=$TRANSPORT_RTP_UDP"
+        }
+        if (source != null && !isSupportedSource(source)) {
+            return "source=$source; supported=$SOURCE_MICROPHONE,$SOURCE_SYSTEM_AUDIO"
+        }
+        if (codec != CODEC_OPUS) {
+            return "codec=$codec; expected=$CODEC_OPUS"
+        }
+        if (codecImpl != CODEC_IMPL_LIBOPUS) {
+            return "codecImpl=$codecImpl; expected=$CODEC_IMPL_LIBOPUS"
+        }
+        if (sampleRate != SAMPLE_RATE) {
+            return "sampleRate=$sampleRate; expected=$SAMPLE_RATE"
+        }
+        if (channels != CHANNELS) {
+            return "channels=$channels; expected=$CHANNELS"
+        }
+        if (frameDurationMs != FRAME_DURATION_MS) {
+            return "frameDurationMs=$frameDurationMs; expected=$FRAME_DURATION_MS"
+        }
+        if (!isSupportedLatencyMode(latencyMode)) {
+            return "latencyMode=$latencyMode; supported=$LATENCY_LOW,$LATENCY_STABLE"
+        }
+        if (!isSupportedQualityBitratePair(qualityMode, bitrateBps)) {
+            return "qualityMode=$qualityMode,bitrateBps=$bitrateBps; expected a supported quality/bitrate pair"
+        }
+        if (rtpPayloadType != RTP_PAYLOAD_TYPE) {
+            return "rtpPayloadType=$rtpPayloadType; expected=$RTP_PAYLOAD_TYPE"
+        }
+        if (rtpClockRate != RTP_CLOCK_RATE) {
+            return "rtpClockRate=$rtpClockRate; expected=$RTP_CLOCK_RATE"
+        }
+        return null
     }
 
     private fun requiredString(metadata: JSONObject, key: String): String {
@@ -419,10 +417,4 @@ data class AudioAccept(
     val rtpSsrc: Long,
     val transportRole: SessionTransportRole,
     val receiverProbeRequired: Boolean
-)
-
-data class AudioTransportOffer(
-    val streamId: Long,
-    val transport: String,
-    val port: Int
 )

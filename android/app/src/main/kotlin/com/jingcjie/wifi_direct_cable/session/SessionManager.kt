@@ -6,7 +6,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import com.jingcjie.wifi_direct_cable.WdCableRuntime
-import com.jingcjie.wifi_direct_cable.audio.NativeOpus
+import com.jingcjie.wifi_direct_cable.audio.AudioCapabilities
 import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolChannel
 import com.jingcjie.wifi_direct_cable.protocol.ProtocolConstants
@@ -94,16 +94,9 @@ class SessionManager(
     private val activeSpeedReceives = ConcurrentHashMap<Long, IncomingSpeedStream>()
     private val speedTestActive = AtomicBoolean(false)
     private val bulkSendLock = Any()
-    private val audioTransportLock = Any()
 
     @Volatile
     private var audioHandler: AudioSessionHandler? = null
-
-    @Volatile
-    private var audioTransport: SessionTransport? = null
-
-    @Volatile
-    private var audioListener: SessionTransportListener? = null
 
     @Volatile
     private var runtime: Runtime? = null
@@ -160,7 +153,6 @@ class SessionManager(
         val sessionId = UUID.randomUUID().toString()
         val newGeneration = generation.incrementAndGet()
         audioHandler?.onSessionEnded("wifi_direct_reconnected")
-        closeAudioTransport()
         closeRuntimeOnly()
         transportAdapter.cancel()
         stopHeartbeat()
@@ -200,7 +192,6 @@ class SessionManager(
         transitionForCleanup(SessionPhase.DISCONNECTING, sessionId, role, reason)
         audioHandler?.onSessionEnded(reason)
         stopHeartbeat()
-        closeAudioTransport()
         closeRuntimeOnly()
         transportAdapter.cancel()
         runtime = null
@@ -249,8 +240,7 @@ class SessionManager(
             "disconnectReason" to (lastDisconnectReason ?: ""),
             "lastRecoveryReason" to (lastRecoveryReason ?: ""),
             "controlChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.CONTROL) == true),
-            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true),
-            "audioChannelOpen" to (audioTransport != null)
+            "bulkChannelOpen" to (activeRuntime?.transports?.containsKey(ProtocolChannel.BULK) == true)
         )
     }
 
@@ -295,137 +285,6 @@ class SessionManager(
     fun sendAudioError(streamId: Long, code: String, message: String) {
         val activeRuntime = runtime ?: return
         sendFeatureError(activeRuntime, streamId, code, message, "audio")
-    }
-
-    fun startAudioListener(
-        streamId: Long,
-        onPort: (Int) -> Unit,
-        onConnected: () -> Unit,
-        onError: (Exception) -> Unit
-    ) {
-        val activeRuntime = runtime
-        if (activeRuntime == null || stateMachine.phase != SessionPhase.READY) {
-            onError(IOException("The WDCable session is not ready"))
-            return
-        }
-        if (activeRuntime.role != SessionRole.GROUP_OWNER) {
-            onError(IOException("Only the group owner can listen for the audio channel"))
-            return
-        }
-
-        try {
-            closeAudioTransport()
-            val listener = transportAdapter.listen(ProtocolChannel.AUDIO, preferredPort = 0)
-            synchronized(audioTransportLock) {
-                audioListener = listener
-            }
-            onPort(listener.port)
-            ioExecutor.execute {
-                try {
-                    val transport = listener.accept { !isCurrent(activeRuntime.generation) }
-                    synchronized(audioTransportLock) {
-                        audioTransport = transport
-                        audioListener = null
-                    }
-                    startAudioReadLoop(activeRuntime, transport)
-                    DiagnosticsLogger.log(
-                        "audio",
-                        "Audio channel accepted",
-                        mapOf("sessionId" to activeRuntime.sessionId, "streamId" to streamId)
-                    )
-                    onConnected()
-                } catch (exception: Exception) {
-                    synchronized(audioTransportLock) {
-                        if (audioListener === listener) {
-                            audioListener = null
-                        }
-                    }
-                    if (isCurrent(activeRuntime.generation)) {
-                        onError(exception)
-                    }
-                }
-            }
-        } catch (exception: Exception) {
-            onError(exception)
-        }
-    }
-
-    fun connectAudioTransport(
-        streamId: Long,
-        port: Int,
-        onConnected: () -> Unit,
-        onError: (Exception) -> Unit
-    ) {
-        val activeRuntime = runtime
-        if (activeRuntime == null || stateMachine.phase != SessionPhase.READY) {
-            onError(IOException("The WDCable session is not ready"))
-            return
-        }
-        if (activeRuntime.role != SessionRole.CLIENT) {
-            onError(IOException("Only the client connects to the audio channel"))
-            return
-        }
-        val host = activeRuntime.peerAddress
-        if (host.isNullOrBlank()) {
-            onError(IOException("Missing group owner address for audio channel"))
-            return
-        }
-
-        closeAudioTransport()
-        ioExecutor.execute {
-            try {
-                val transport = connectWithRetry(ProtocolChannel.AUDIO, host, port, activeRuntime.generation)
-                synchronized(audioTransportLock) {
-                    audioTransport = transport
-                }
-                startAudioReadLoop(activeRuntime, transport)
-                DiagnosticsLogger.log(
-                    "audio",
-                    "Audio channel connected",
-                    mapOf("sessionId" to activeRuntime.sessionId, "streamId" to streamId, "port" to port)
-                )
-                onConnected()
-            } catch (exception: Exception) {
-                if (isCurrent(activeRuntime.generation)) {
-                    onError(exception)
-                }
-            }
-        }
-    }
-
-    fun writeAudioFrame(streamId: Long, sequenceNumber: Long, metadata: JSONObject, payload: ByteArray) {
-        val transport = synchronized(audioTransportLock) { audioTransport }
-            ?: throw IOException("Audio channel is not connected")
-        transport.writeFrame(
-            ProtocolFrame(
-                type = ProtocolFrameType.AUDIO_FRAME,
-                channel = ProtocolChannel.AUDIO,
-                streamId = streamId,
-                sequenceNumber = sequenceNumber,
-                correlationId = UUID.randomUUID(),
-                metadataJson = metadata.toString(),
-                payload = payload
-            )
-        )
-    }
-
-    fun closeAudioTransport() {
-        val listener: SessionTransportListener?
-        val transport: SessionTransport?
-        synchronized(audioTransportLock) {
-            listener = audioListener
-            transport = audioTransport
-            audioListener = null
-            audioTransport = null
-        }
-        try {
-            listener?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            transport?.cancel()
-        } catch (_: Exception) {
-        }
     }
 
     fun sendFileStream(
@@ -841,21 +700,7 @@ class SessionManager(
     }
 
     private fun capabilitiesJson(): JSONArray {
-        val capabilities = JSONArray()
-            .put(ProtocolConstants.CAPABILITY_CHAT)
-            .put(ProtocolConstants.CAPABILITY_BULK_FILE)
-            .put(ProtocolConstants.CAPABILITY_BULK_SPEED)
-            .put(ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT)
-        if (NativeOpus.available) {
-            capabilities
-                .put(ProtocolConstants.CAPABILITY_AUDIO_LINK)
-                .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS)
-                .put(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP)
-                .put(ProtocolConstants.CAPABILITY_AUDIO_RTCP)
-                .put(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
-                .put(ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT)
-        }
-        return capabilities
+        return AudioCapabilities.advertisedCapabilitiesJson()
     }
 
     private fun channelsJson(): JSONObject {
@@ -899,56 +744,6 @@ class SessionManager(
                 } catch (exception: Exception) {
                     if (isCurrent(activeRuntime.generation) && stateMachine.phase == SessionPhase.READY) {
                         degradeReadySession(activeRuntime, "bulk_channel_failed", exception)
-                    }
-                    return@execute
-                }
-            }
-        }
-    }
-
-    private fun startAudioReadLoop(activeRuntime: Runtime, transport: SessionTransport) {
-        ioExecutor.execute {
-            while (
-                isCurrent(activeRuntime.generation) &&
-                stateMachine.phase == SessionPhase.READY &&
-                synchronized(audioTransportLock) { audioTransport === transport }
-            ) {
-                try {
-                    val frame = transport.readFrame()
-                        ?: throw IOException("Audio channel closed by peer")
-                    if (frame.type == ProtocolFrameType.AUDIO_FRAME && frame.channel == ProtocolChannel.AUDIO) {
-                        audioHandler?.onAudioFrame(frame)
-                    } else {
-                        DiagnosticsLogger.log(
-                            "audio",
-                            "Ignoring unexpected audio frame",
-                            mapOf("type" to frame.type.protocolName, "channel" to frame.channel.protocolName)
-                        )
-                    }
-                } catch (exception: Exception) {
-                    val wasActive = synchronized(audioTransportLock) {
-                        if (audioTransport === transport) {
-                            audioTransport = null
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    try {
-                        transport.cancel()
-                    } catch (_: Exception) {
-                    }
-                    if (wasActive && isCurrent(activeRuntime.generation) && stateMachine.phase == SessionPhase.READY) {
-                        DiagnosticsLogger.log(
-                            "audio",
-                            "Audio channel closed",
-                            mapOf(
-                                "sessionId" to activeRuntime.sessionId,
-                                "errorType" to exception.javaClass.simpleName,
-                                "error" to exception.message
-                            )
-                        )
-                        audioHandler?.onAudioTransportClosed("audio_transport_closed")
                     }
                     return@execute
                 }
@@ -1689,7 +1484,6 @@ class SessionManager(
 
         stopHeartbeat()
         audioHandler?.onSessionEnded(reason)
-        closeAudioTransport()
         cleanupIncomingBulkStreams(deletePartialFiles = true)
         speedTestActive.set(false)
         closeRuntimeOnly()
@@ -1853,7 +1647,6 @@ class SessionManager(
         )
         stopHeartbeat()
         audioHandler?.onSessionEnded(reason)
-        closeAudioTransport()
         cleanupIncomingBulkStreams(deletePartialFiles = true)
         speedTestActive.set(false)
         closeRuntimeOnly()
@@ -1901,23 +1694,7 @@ class SessionManager(
     }
 
     private fun localCapabilitiesList(): List<String> {
-        val capabilities = mutableListOf(
-            ProtocolConstants.CAPABILITY_CHAT,
-            ProtocolConstants.CAPABILITY_BULK_FILE,
-            ProtocolConstants.CAPABILITY_BULK_SPEED,
-            ProtocolConstants.CAPABILITY_DIAGNOSTICS_EXPORT
-        )
-        if (NativeOpus.available) {
-            capabilities += listOf(
-                ProtocolConstants.CAPABILITY_AUDIO_LINK,
-                ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS,
-                ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP,
-                ProtocolConstants.CAPABILITY_AUDIO_RTCP,
-                ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS,
-                ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT
-            )
-        }
-        return capabilities
+        return AudioCapabilities.advertisedCapabilitiesForRuntime()
     }
 
     private fun emitState(
@@ -1976,7 +1753,6 @@ class SessionManager(
     }
 
     private fun closeRuntimeOnly() {
-        closeAudioTransport()
         runtime?.transports?.values?.let(::closeTransports)
         runtime = null
     }

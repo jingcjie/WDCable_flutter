@@ -15,8 +15,6 @@ import android.os.Process
 import androidx.core.content.ContextCompat
 import com.jingcjie.wifi_direct_cable.PermissionManager
 import com.jingcjie.wifi_direct_cable.diagnostics.DiagnosticsLogger
-import com.jingcjie.wifi_direct_cable.protocol.ProtocolConstants
-import com.jingcjie.wifi_direct_cable.protocol.ProtocolFrame
 import com.jingcjie.wifi_direct_cable.session.AudioSessionHandler
 import com.jingcjie.wifi_direct_cable.session.SessionManager
 import com.jingcjie.wifi_direct_cable.session.SessionTransportRole
@@ -302,24 +300,21 @@ class AudioService(
             }
             AudioProtocol.KIND_OFFER -> handleOffer(metadata)
             AudioProtocol.KIND_ACCEPT -> handleAccept(metadata)
-            AudioProtocol.KIND_TRANSPORT -> {
-                DiagnosticsLogger.log("audio", "Ignoring retired TCP audio.transport for v2", mapOf("streamId" to metadata.optLong("streamId", 0L)))
-            }
             AudioProtocol.KIND_STOP -> cleanupLocal(metadata.optString("reason", "peer_stop"), emitStopped = true)
+            else -> DiagnosticsLogger.log(
+                "audio",
+                "Ignoring unknown audio control message",
+                mapOf(
+                    "kind" to metadata.optString("kind"),
+                    "streamId" to metadata.optLong("streamId", 0L)
+                )
+            )
         }
-    }
-
-    override fun onAudioFrame(frame: ProtocolFrame) {
-        DiagnosticsLogger.log("audio", "Ignoring retired TCP audio.frame for v2", mapOf("streamId" to frame.streamId))
     }
 
     override fun onAudioFeatureError(code: String, message: String, streamId: Long) {
         cleanupLocal("peer_error", emitStopped = true)
         emitAudioError(code, message, streamId)
-    }
-
-    override fun onAudioTransportClosed(reason: String) {
-        DiagnosticsLogger.log("audio", "Ignoring retired TCP audio channel close for v2", mapOf("reason" to reason))
     }
 
     override fun onSessionEnded(reason: String) {
@@ -1073,7 +1068,6 @@ class AudioService(
         stopRtcpReports()
         closeUdpSockets()
         jitterBuffer.clear()
-        sessionManager.closeAudioTransport()
         synchronized(stateLock) {
             mode = MODE_IDLE
             state = STATE_IDLE
@@ -1234,15 +1228,11 @@ class AudioService(
     }
 
     private fun peerSupportsAudio(peerCapabilities: Set<String>): Boolean {
-        return peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_LINK) &&
-            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_OPUS) &&
-            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_TRANSPORT_RTP) &&
-            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_RTCP) &&
-            peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_CODEC_LIBOPUS)
+        return AudioCapabilities.peerSupportsAudio(peerCapabilities)
     }
 
     private fun peerSupportsAudioQualitySelection(peerCapabilities: Set<String>): Boolean {
-        return peerCapabilities.contains(ProtocolConstants.CAPABILITY_AUDIO_QUALITY_SELECT)
+        return AudioCapabilities.peerSupportsAudioQualitySelection(peerCapabilities)
     }
 
     private fun nextStreamId(): Long {

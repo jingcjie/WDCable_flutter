@@ -201,7 +201,6 @@ class FlutterMethodChannelHandler(
             "chatServerRunning" to (stats["controlChannelOpen"] as? Boolean ?: false),
             "speedTestServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
             "fileTransferServerRunning" to (stats["bulkChannelOpen"] as? Boolean ?: false),
-            "audioChannelOpen" to (stats["audioChannelOpen"] as? Boolean ?: false),
             "sessionState" to (stats["sessionState"] as? String ?: "Disconnected"),
             "sessionId" to (stats["sessionId"] as? String ?: ""),
             "sessionReady" to (stats["isReady"] as? Boolean ?: false),
