@@ -7,10 +7,15 @@ Features:
 - Direct device-to-device connection over Wi-Fi Direct.
 - High-speed local file transfer.
 - Real-time chat between connected peers.
-- Audio Link for live microphone audio over the peer session.
+- Protocol v2 transport setup with UDP rendezvous and detailed diagnostics.
+- Low-latency Audio Link using RTP/RTCP over UDP with libopus.
+- Selectable sender audio quality and latency modes.
 - Built-in upload and download speed tests.
-- Shared session protocol for chat, files, speed tests, and audio.
 
 The Android app can connect to another Android device running WD Cable. A separate Windows companion client is also available for Android-to-Windows workflows, including using an Android device as a local microphone sender.
+
+Version 2.0.1 uses Protocol v2 and is not compatible with Protocol v1 builds. Both devices must run WD Cable 2.0.1 or another Protocol v2-compatible build.
+
+Requires Android 13 or newer. Release APKs support arm64-v8a and x86_64 devices; 32-bit armeabi-v7a devices are not supported.
 
 WD Cable is designed for offline peer-to-peer experiments, local transfer, quick device-to-device testing, and private nearby sharing.

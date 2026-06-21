@@ -1,0 +1,6 @@
+New in 2.0.1:
+- Protocol v2 connection setup for more reliable Wi-Fi Direct sessions.
+- Fixed Windows endpoint routing issues caused by stale 192.168.137.1 adapters.
+- Upgraded Audio Link to lower-latency RTP/RTCP streaming with libopus.
+- Added audio latency modes, quality presets, and richer live audio stats.
+- Protocol v1 builds are no longer compatible with this release.

@@ -14,6 +14,18 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val hasReleaseSigningConfig = listOf(
+    "keyAlias",
+    "keyPassword",
+    "storeFile",
+    "storePassword",
+).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+
+val splitPerAbi = providers.gradleProperty("split-per-abi")
+    .map(String::toBoolean)
+    .getOrElse(false)
+val supportedAbis = listOf("arm64-v8a", "x86_64")
+
 android {
     namespace = "com.jingcjie.wifi_direct_cable"
     compileSdk = flutter.compileSdkVersion
@@ -38,13 +50,17 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
+        // Flutter owns ABI filters for split builds. For other builds, keep
+        // unsupported armeabi-v7a out because no libopus binary is bundled.
+        if (!splitPerAbi) {
+            ndk {
+                abiFilters += supportedAbis
+            }
 
-        externalNativeBuild {
-            cmake {
-                abiFilters += listOf("arm64-v8a", "x86_64")
+            externalNativeBuild {
+                cmake {
+                    abiFilters += supportedAbis
+                }
             }
         }
     }
@@ -62,17 +78,21 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
