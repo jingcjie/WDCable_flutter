@@ -225,10 +225,18 @@ class _AudioTabState extends State<AudioTab> {
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
+              SizedBox(
+                width: double.infinity,
                 child: SegmentedButton<String>(
+                  direction: Axis.vertical,
                   showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    alignment: Alignment.center,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   segments: [
                     ButtonSegment(
                       value: 'standard',
@@ -287,12 +295,18 @@ class _AudioTabState extends State<AudioTab> {
               context,
               icon: Icons.settings_voice,
               title: AppLocalizations.of(context)!.audioEncoding,
-              value: _formatOpusQuality(
+              value: !isSendMode && !widget.state.isAudioStreaming
+                  ? AppLocalizations.of(context)!.audioOpus
+                  : _formatOpusQuality(
+                      isSendMode
+                          ? _qualityBitrate(_qualityMode)
+                          : widget.state.audioStats.configuredBitrateBps,
+                    ),
+              trailing: Text(
                 isSendMode
-                    ? _qualityBitrate(_qualityMode)
-                    : widget.state.audioStats.configuredBitrateBps,
+                    ? AppLocalizations.of(context)!.audioOnlyOption
+                    : AppLocalizations.of(context)!.audioFollowSenderSide,
               ),
-              trailing: Text(AppLocalizations.of(context)!.audioOnlyOption),
             ),
             const SizedBox(height: 20),
             SizedBox(

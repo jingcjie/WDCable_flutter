@@ -495,6 +495,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioOnlyOption => 'Only option';
 
   @override
+  String get audioFollowSenderSide => 'Follow sender side';
+
+  @override
   String get audioStop => 'Stop Audio';
 
   @override

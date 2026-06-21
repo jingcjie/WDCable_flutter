@@ -968,6 +968,12 @@ abstract class AppLocalizations {
   /// **'Only option'**
   String get audioOnlyOption;
 
+  /// No description provided for @audioFollowSenderSide.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow sender side'**
+  String get audioFollowSenderSide;
+
   /// No description provided for @audioStop.
   ///
   /// In en, this message translates to:

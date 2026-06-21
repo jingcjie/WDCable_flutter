@@ -594,6 +594,7 @@
   "audioOpus": "Opus",
   "audioOpus32Kbps": "Opus 32 kbps",
   "audioOnlyOption": "Only option",
+  "audioFollowSenderSide": "Follow sender side",
   "audioStop": "Stop Audio",
   "audioStart": "Start Audio",
   "audioLiveStats": "Live Stats",

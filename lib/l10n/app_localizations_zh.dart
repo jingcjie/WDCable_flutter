@@ -487,6 +487,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioOnlyOption => '唯一选项';
 
   @override
+  String get audioFollowSenderSide => '跟随发送端';
+
+  @override
   String get audioStop => '停止音频';
 
   @override
