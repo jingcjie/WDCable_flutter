@@ -794,8 +794,13 @@ class WiFiDirectController {
   Future<void> logDeviceSettings() async {
     try {
       final settings = await _service.getDeviceSettings();
+      final appVersion = settings['appVersion']?.toString() ?? '';
+      if (appVersion.isNotEmpty && appVersion != _currentState.appVersion) {
+        _updateState(_currentState.copyWith(appVersion: appVersion));
+      }
       _addLog('=== WiFi Direct Device Settings ===');
       _addLog('Device Name: ${settings['deviceName'] ?? 'Unknown'}');
+      _addLog('App Version: ${settings['appVersion'] ?? 'Unknown'}');
       _addLog(
         'WiFi Direct Supported: ${settings['wifiDirectSupported'] ?? false}',
       );

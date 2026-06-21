@@ -598,6 +598,7 @@ class WiFiDirectState {
   final String listenState;
   final bool isServiceRegistered;
   final int operationId;
+  final String appVersion;
   final String? lastNativeError;
   final bool isConnecting;
   final String? pendingPeerAddress;
@@ -639,6 +640,7 @@ class WiFiDirectState {
     this.listenState = 'unknown',
     this.isServiceRegistered = false,
     this.operationId = 0,
+    this.appVersion = '',
     this.lastNativeError,
     this.isConnecting = false,
     this.pendingPeerAddress,
@@ -681,6 +683,7 @@ class WiFiDirectState {
     String? listenState,
     bool? isServiceRegistered,
     int? operationId,
+    String? appVersion,
     Object? lastNativeError = _unset,
     bool? isConnecting,
     Object? pendingPeerAddress = _unset,
@@ -723,6 +726,7 @@ class WiFiDirectState {
       listenState: listenState ?? this.listenState,
       isServiceRegistered: isServiceRegistered ?? this.isServiceRegistered,
       operationId: operationId ?? this.operationId,
+      appVersion: appVersion ?? this.appVersion,
       lastNativeError: identical(lastNativeError, _unset)
           ? this.lastNativeError
           : lastNativeError as String?,

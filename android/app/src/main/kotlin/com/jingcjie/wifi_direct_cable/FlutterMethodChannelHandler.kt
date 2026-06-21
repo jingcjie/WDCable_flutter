@@ -196,6 +196,8 @@ class FlutterMethodChannelHandler(
             "wifiP2pEnabled" to isWifiDirectReady(),
             "deviceName" to Build.MODEL,
             "deviceAddress" to "Unavailable",
+            "appVersion" to appVersionName(),
+            "appBuildNumber" to appBuildNumber(),
             "isGroupOwner" to (stats["isGroupOwner"] as? Boolean ?: false),
             "transportRole" to (stats["transportRole"] as? String ?: ""),
             "chatServerRunning" to (stats["controlChannelOpen"] as? Boolean ?: false),
@@ -239,6 +241,28 @@ class FlutterMethodChannelHandler(
             wifiDirectSupported &&
             permissionManager.hasWifiDirectRuntimePermissions() &&
             wifiDirectManager.channel != null
+    }
+
+    private fun appVersionName(): String {
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun appBuildNumber(): Long {
+        return try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toLong()
+            }
+        } catch (_: Exception) {
+            0L
+        }
     }
     
     private fun getDiscoveryStatus(result: MethodChannel.Result) {
