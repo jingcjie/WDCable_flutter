@@ -70,7 +70,15 @@ jobs:
           fi
 
           echo "$(dirname "$sdkmanager_bin")" >> "$GITHUB_PATH"
+
+          set +o pipefail
           yes | "$sdkmanager_bin" --licenses >/dev/null
+          sdkmanager_license_status="${PIPESTATUS[1]}"
+          set -o pipefail
+          if [[ "$sdkmanager_license_status" -ne 0 ]]; then
+            exit "$sdkmanager_license_status"
+          fi
+
           "$sdkmanager_bin" \
             "platforms;android-$ANDROID_API_LEVEL" \
             "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
