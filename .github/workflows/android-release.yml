@@ -2,9 +2,15 @@ name: Android release
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
+    inputs:
+      release_tag:
+        description: "Optional generated-release tag. Blank uses ci-android-<run>-<attempt>."
+        required: false
+        type: string
+      release_name:
+        description: "Optional generated-release title."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -151,16 +157,41 @@ jobs:
             build/app/outputs/flutter-apk/SHA256SUMS.txt
           if-no-files-found: error
 
-      - name: Attach APKs to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create non-latest CI GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_NAME_INPUT: ${{ inputs.release_name }}
         run: |
           set -euo pipefail
-          tag_name="${GITHUB_REF_NAME}"
+
+          tag_name="$RELEASE_TAG_INPUT"
+          if [[ -z "$tag_name" ]]; then
+            tag_name="ci-android-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          release_title="$RELEASE_NAME_INPUT"
+          if [[ -z "$release_title" ]]; then
+            release_title="CI Android build ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          release_notes="$(printf 'Automated Android APK build from GitHub Actions.\n\nSource ref: %s\nCommit: %s\nWorkflow run: %s/%s/actions/runs/%s\n\nThis release is marked as a prerelease and is not marked as Latest.\n' \
+            "$GITHUB_REF_NAME" \
+            "$GITHUB_SHA" \
+            "$GITHUB_SERVER_URL" \
+            "$GITHUB_REPOSITORY" \
+            "$GITHUB_RUN_ID"
+          )"
+
           gh release view "$tag_name" >/dev/null 2>&1 || \
-            gh release create "$tag_name" --title "$tag_name" --notes "Automated Android release build for $tag_name."
+            gh release create "$tag_name" \
+              --target "$GITHUB_SHA" \
+              --title "$release_title" \
+              --notes "$release_notes" \
+              --prerelease \
+              --latest=false
+
           gh release upload "$tag_name" \
             build/app/outputs/flutter-apk/*.apk \
             build/app/outputs/flutter-apk/SHA256SUMS.txt \
