@@ -135,7 +135,11 @@ jobs:
         run: |
           set -euo pipefail
           export SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
-          flutter build apk --release --split-per-abi
+          rm -rf build/app/outputs/flutter-apk
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --target-platform android-arm64,android-x64
           sha256sum build/app/outputs/flutter-apk/*.apk > build/app/outputs/flutter-apk/SHA256SUMS.txt
 
       - name: Upload workflow artifact
