@@ -53,8 +53,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager \
+
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$sdk_root" ]]; then
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set" >&2
+            exit 1
+          fi
+
+          sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$sdkmanager_bin" ]]; then
+            sdkmanager_bin="$(find "$sdk_root/cmdline-tools" -path "*/bin/sdkmanager" -type f | sort -r | head -n 1 || true)"
+          fi
+          if [[ -z "$sdkmanager_bin" || ! -x "$sdkmanager_bin" ]]; then
+            echo "sdkmanager not found under $sdk_root/cmdline-tools" >&2
+            exit 1
+          fi
+
+          echo "$(dirname "$sdkmanager_bin")" >> "$GITHUB_PATH"
+          yes | "$sdkmanager_bin" --licenses >/dev/null
+          "$sdkmanager_bin" \
             "platforms;android-$ANDROID_API_LEVEL" \
             "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
             "ndk;$ANDROID_NDK_VERSION" \
