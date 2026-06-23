@@ -19,10 +19,6 @@
   <img src="https://img.shields.io/badge/version-2.0.1-orange.svg" alt="Version 2.0.1">
 </p>
 
-<p align="center">
-  <img src="assets/demonstration.png" alt="WiFi Direct Cable demonstration" width="760">
-</p>
-
 ## What It Does
 
 WiFi Direct Cable creates a private local link between nearby devices using Wi-Fi Direct. Once connected, the devices share one negotiated app session for chat, file transfer, speed testing, and audio.
