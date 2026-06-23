@@ -122,18 +122,3 @@ Then open a pull request.
 ## License
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
-
-<details>
-<summary>Android Release QA Checklist</summary>
-
-Use this checklist before coordinated Windows validation:
-
-- Android-to-Android: connect both initiation directions and confirm both reach `Ready`.
-- Chat: send 10 messages each direction.
-- File: send a small text file, the same filename twice, a zero-byte file, and a media/content URI.
-- Speed: run download/upload speed tests 5 times.
-- Failure: close the peer app during file transfer, turn Wi-Fi off during speed test, then reconnect.
-- Missing or incompatible peer app: connect to a peer without Protocol v2 support and confirm a clear compatibility failure.
-- Diagnostics: use the copy icon in the Connection tab logs header after one success and one failure, then save the copied text with the test report.
-
-</details>
