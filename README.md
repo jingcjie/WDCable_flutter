@@ -17,6 +17,15 @@
   <img src="https://img.shields.io/badge/platform-Android%20%7C%20Windows-brightgreen" alt="Android and Windows">
   <img src="https://img.shields.io/badge/Made%20with-Flutter-blue.svg" alt="Made with Flutter">
   <img src="https://img.shields.io/badge/version-2.0.1-orange.svg" alt="Version 2.0.1">
+  <a href="https://shields.rbtlog.dev/com.jingcjie.wifi_direct_cable">
+    <img src="https://shields.rbtlog.dev/simple/com.jingcjie.wifi_direct_cable?style=for-the-badge" alt="Reproducible Builds status">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://apt.izzysoft.de/packages/com.jingcjie.wifi_direct_cable">
+    <img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroidButtonGreyBorder_nofont.png" height="80" alt="Get it at IzzyOnDroid">
+  </a>
 </p>
 
 ## What It Does
