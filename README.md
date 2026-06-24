@@ -28,6 +28,17 @@
   </a>
 </p>
 
+<p align="center">
+Windows:
+</p>
+<p align="center">
+  <a href="https://apps.microsoft.com/store/detail/9MZQMRHFFJJW?cid=DevShareMCLPCS">
+    <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get WDCable from the Microsoft Store" width="200">
+  </a>
+</p>
+
+
+
 ## What It Does
 
 WiFi Direct Cable creates a private local link between nearby devices using Wi-Fi Direct. Once connected, the devices share one negotiated app session for chat, file transfer, speed testing, and audio.
